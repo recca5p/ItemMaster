@@ -416,3 +416,16 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# publish artifacts
+out/
+function.zip
+*.trx
+
+# OS
+.DS_Store
+EOF
