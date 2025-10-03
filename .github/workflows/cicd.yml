@@ -25,7 +25,7 @@ jobs:
       - run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
       - name: Publish (linux-arm64)
         run: |
-          dotnet publish $PROJECT_PATH -c Release -r linux-arm64 --self-contained false -o $OUTPUT_DIR
+          dotnet publish -c Release -r linux-arm64 --self-contained false -o $OUTPUT_DIR
           cd $OUTPUT_DIR && zip -r ../function.zip . && cd -
       - uses: actions/upload-artifact@v4
         with: { name: lambda-package, path: function.zip }
