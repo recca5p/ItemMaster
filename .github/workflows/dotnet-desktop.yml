@@ -1,0 +1,50 @@
+name: CI/CD Lambda (.NET 8)
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-southeast-1
+  LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
+  PROJECT_PATH: ItemMaster.Lambda
+  OUTPUT_DIR: out
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '8.x' }
+      - run: dotnet restore
+      - run: dotnet build --configuration Release --no-restore
+      - run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+      - name: Publish (linux-arm64)
+        run: |
+          dotnet publish $PROJECT_PATH -c Release -r linux-arm64 --self-contained false -o $OUTPUT_DIR
+          cd $OUTPUT_DIR && zip -r ../function.zip . && cd -
+      - uses: actions/upload-artifact@v4
+        with: { name: lambda-package, path: function.zip }
+
+  deploy:
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: lambda-package, path: . }
+      - name: Configure AWS creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --zip-file fileb://function.zip \
+            --publish
