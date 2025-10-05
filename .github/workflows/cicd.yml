@@ -60,7 +60,7 @@ jobs:
           path: |
             ItemMaster.Lambda/src/ItemMaster.Infrastructure/Ef/Migrations/**
 
-    deploy:
+  deploy:
     needs: build-test
     runs-on: ubuntu-latest
     steps:
