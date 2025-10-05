@@ -60,11 +60,12 @@ jobs:
           path: |
             ItemMaster.Lambda/src/ItemMaster.Infrastructure/Ef/Migrations/**
 
-  deploy:
-    needs: [build-test]
+    deploy:
+    needs: build-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with: { name: lambda-package, path: . }
 
@@ -74,43 +75,46 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # --- MIGRATION: fetch RDS creds & apply EF migrations ---
-      - name: Install tools
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          dotnet tool install --global dotnet-ef
-          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
-
-      - name: Build MySQL connection string from Secrets Manager
-        id: conn
-        run: |
-          SEC=$(aws secretsmanager get-secret-value \
-                  --secret-id "${{ env.MYSQL_SECRET_ID }}" \
-                  --query SecretString --output text)
-          # Common fields used by Secrets Manager for RDS
-          HOST=$(echo "$SEC" | jq -r '.host // .hostname')
-          PORT=$(echo "$SEC" | jq -r '.port // 3306')
-          DB=$(echo "$SEC" | jq -r '.dbname // .database // "item_master"')
-          USER=$(echo "$SEC" | jq -r '.username')
-          PASS=$(echo "$SEC" | jq -r '.password')
-
-          # Build Pomelo/MySQL connection string; enforce SSL
-          CONN="Server=$HOST;Port=$PORT;Database=$DB;User Id=$USER;Password=$PASS;SslMode=Required;"
-          echo "conn_string=$CONN" >> "$GITHUB_OUTPUT"
-
-      - name: Apply EF Core migrations to RDS
-        env:
-          MIGRATION_CONNECTION_STRING: ${{ steps.conn.outputs.conn_string }}
-        run: |
-          dotnet ef database update \
-            --project ItemMaster.Lambda/src/ItemMaster.Infrastructure \
-            --startup-project ItemMaster.Lambda/src/ItemMaster.Lambda \
-            --context ItemMaster.Infrastructure.Ef.ItemMasterDbContext
-
-      # --- DEPLOY LAMBDA CODE ---
       - name: Update Lambda code
         run: |
           aws lambda update-function-code \
             --function-name "$LAMBDA_FUNCTION_NAME" \
             --zip-file fileb://function.zip \
             --publish
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
+
+      - name: Enable APPLY_MIGRATIONS
+        id: enable_migrate
+        run: |
+          CUR=$(aws lambda get-function-configuration \
+                  --function-name "$LAMBDA_FUNCTION_NAME" \
+                  --query 'Environment.Variables' --output json)
+          NEW=$(jq '. + {"APPLY_MIGRATIONS":"true"}' <<< "$CUR")
+          aws lambda update-function-configuration \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --environment "Variables=$NEW"
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
+
+      - name: Invoke function to run migrations
+        run: |
+          echo '{}' > /tmp/empty.json
+          aws lambda invoke \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --payload fileb:///tmp/empty.json \
+            --cli-binary-format raw-in-base64-out \
+            /tmp/invoke.out >/tmp/invoke.meta
+          cat /tmp/invoke.out
+          # optional: tail logs to verify success
+          aws logs tail "/aws/lambda/${LAMBDA_FUNCTION_NAME}" --since 5m --format short || true
+
+      - name: Disable APPLY_MIGRATIONS
+        run: |
+          CUR=$(aws lambda get-function-configuration \
+                  --function-name "$LAMBDA_FUNCTION_NAME" \
+                  --query 'Environment.Variables' --output json)
+          NEW=$(jq 'del(.APPLY_MIGRATIONS)' <<< "$CUR")
+          aws lambda update-function-configuration \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --environment "Variables=$NEW"
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
+
