@@ -34,13 +34,12 @@ public sealed class MySqlItemMasterLogRepository : IItemMasterLogRepository
         }
         catch
         {
-            try { await tx.RollbackAsync(ct); } catch { /* ignore */ }
+            try { await tx.RollbackAsync(ct); } catch { }
             throw;
         }
     }
 }
 
-// In-memory fallback repository for local tests when MySQL not configured
 public sealed class InMemoryItemMasterLogRepository : IItemMasterLogRepository
 {
     private readonly List<ItemLogRecord> _store = new();

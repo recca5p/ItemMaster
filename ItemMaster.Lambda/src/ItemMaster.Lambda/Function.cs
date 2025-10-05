@@ -12,7 +12,6 @@ using Microsoft.EntityFrameworkCore;
 using Amazon.SecretsManager;
 using Pomelo.EntityFrameworkCore.MySql.Storage;
 
-// Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
 namespace ItemMaster.Lambda;
@@ -26,13 +25,11 @@ public class Function
     static Function()
     {
         var services = new ServiceCollection();
-        // Core singletons
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IConfigProvider, EnvConfigProvider>();
         services.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
         services.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
 
-        // Build temp provider to resolve connection string
         using (var temp = services.BuildServiceProvider())
         {
             string? connStr = null;
@@ -57,12 +54,10 @@ public class Function
             }
         }
 
-        // Application services
         services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
 
         ServiceProvider = services.BuildServiceProvider();
 
-        // Optional: apply EF migrations once per cold start if enabled
         var apply = Environment.GetEnvironmentVariable("APPLY_MIGRATIONS");
         if (string.Equals(apply, "true", StringComparison.OrdinalIgnoreCase))
         {
@@ -83,7 +78,6 @@ public class Function
         }
     }
 
-    // API Gateway entry point
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
     {
         var logger = context.Logger;

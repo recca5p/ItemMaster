@@ -39,16 +39,14 @@ public sealed class ProcessSkusUseCase : IProcessSkusUseCase
             }
             catch
             {
-                // TODO: add structured logging when logger added
             }
         }
 
         return new ProcessSkusResponse
         {
-            Published = 0, // SQS publisher not yet implemented
+            Published = 0,
             Logged = logged,
             Failed = list.Count - logged
         };
     }
 }
-

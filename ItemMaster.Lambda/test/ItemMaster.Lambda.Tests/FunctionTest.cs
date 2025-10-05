@@ -27,7 +27,7 @@ public class FunctionTest
         Assert.NotNull(parsed);
         Assert.Equal(3, parsed!.Logged);
         Assert.Equal(0, parsed.Failed);
-        Assert.Equal(0, parsed.Published); // not implemented yet
+        Assert.Equal(0, parsed.Published);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class FunctionTest
         var context = new TestLambdaContext();
         var request = new Amazon.Lambda.APIGatewayEvents.APIGatewayProxyRequest { Body = "{not-json" };
         var response = await function.FunctionHandler(request, context);
-        Assert.Equal(200, response.StatusCode); // still 200 but empty processed list
+        Assert.Equal(200, response.StatusCode);
         var parsed = JsonSerializer.Deserialize<ProcessSkusResponse>(response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.NotNull(parsed);
         Assert.Equal(0, parsed!.Logged);
