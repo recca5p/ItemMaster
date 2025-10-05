@@ -13,5 +13,16 @@
   <ItemGroup>
     <PackageReference Include="Amazon.Lambda.Core" Version="2.7.0" />
     <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.4" />
+    <PackageReference Include="Amazon.Lambda.APIGatewayEvents" Version="2.7.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.300.6" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.0" />
+    <PackageReference Include="Amazon.Lambda.Tools" Version="8.0.4" PrivateAssets="All" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ItemMaster.Application/ItemMaster.Application.csproj" />
+    <ProjectReference Include="../ItemMaster.Infrastructure/ItemMaster.Infrastructure.csproj" />
+    <ProjectReference Include="../ItemMaster.Shared/ItemMaster.Shared.csproj" />
+    <ProjectReference Include="../ItemMaster.Contracts/ItemMaster.Contracts.csproj" />
   </ItemGroup>
 </Project>

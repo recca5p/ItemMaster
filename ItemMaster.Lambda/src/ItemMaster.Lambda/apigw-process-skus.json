@@ -1,0 +1,26 @@
+{
+  "resource": "/items/process",
+  "path": "/items/process",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {
+    "Content-Type": ["application/json"]
+  },
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/items/process",
+    "httpMethod": "POST",
+    "path": "/dev/items/process",
+    "requestId": "local-test-request-id",
+    "identity": {"sourceIp": "127.0.0.1"},
+    "stage": "dev"
+  },
+  "body": "{\"skus\":[\"SKU1\",\"SKU2\",\"SKU3\"]}",
+  "isBase64Encoded": false
+}
+
