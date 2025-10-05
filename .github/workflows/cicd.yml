@@ -13,7 +13,7 @@ env:
   LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
   PROJECT_PATH: ItemMaster.Lambda
   OUTPUT_DIR: out
-  MYSQL_SECRET_ID: /im-dev/secret/mysql
+  MYSQL_SECRET_ID: ${{ secrets.RDS_SECRET_ID }}
 
 permissions:
   id-token: write
