@@ -2,12 +2,18 @@ name: CI/CD Lambda (.NET 8)
 
 on:
   workflow_dispatch:
+    inputs:
+      migration_name:
+        description: 'Optional EF migration name to generate (artifact only)'
+        required: false
+        default: ''
 
 env:
   AWS_REGION: ap-southeast-1
   LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
   PROJECT_PATH: ItemMaster.Lambda
   OUTPUT_DIR: out
+  MYSQL_SECRET_ID: /im-dev/secret/mysql
 
 permissions:
   id-token: write
@@ -25,23 +31,83 @@ jobs:
       - run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
       - name: Publish (linux-arm64)
         run: |
-          dotnet publish -c Release -r linux-arm64 --self-contained false -o $OUTPUT_DIR
+          dotnet publish -c Release -r linux-arm64 --self-contained false -o $OUTPUT_DIR ./ItemMaster.Lambda/src/ItemMaster.Lambda
           cd $OUTPUT_DIR && zip -r ../function.zip . && cd -
       - uses: actions/upload-artifact@v4
         with: { name: lambda-package, path: function.zip }
 
+  generate-migration:
+    if: ${{ github.event.inputs.migration_name != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '8.x' }
+      - name: Install EF Tools
+        run: |
+          dotnet tool install --global dotnet-ef
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+      - name: Generate migration
+        run: |
+          dotnet ef migrations add "${{ github.event.inputs.migration_name }}" \
+            --project ItemMaster.Lambda/src/ItemMaster.Infrastructure \
+            --startup-project ItemMaster.Lambda/src/ItemMaster.Lambda \
+            --context ItemMaster.Infrastructure.Ef.ItemMasterDbContext \
+            --output-dir Ef/Migrations
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ef-migration-${{ github.event.inputs.migration_name }}
+          path: |
+            ItemMaster.Lambda/src/ItemMaster.Infrastructure/Ef/Migrations/**
+
   deploy:
-    needs: build-test
+    needs: [build-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: lambda-package, path: . }
+
       - name: Configure AWS creds
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
+
+      # --- MIGRATION: fetch RDS creds & apply EF migrations ---
+      - name: Install tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          dotnet tool install --global dotnet-ef
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Build MySQL connection string from Secrets Manager
+        id: conn
+        run: |
+          SEC=$(aws secretsmanager get-secret-value \
+                  --secret-id "${{ env.MYSQL_SECRET_ID }}" \
+                  --query SecretString --output text)
+          # Common fields used by Secrets Manager for RDS
+          HOST=$(echo "$SEC" | jq -r '.host // .hostname')
+          PORT=$(echo "$SEC" | jq -r '.port // 3306')
+          DB=$(echo "$SEC" | jq -r '.dbname // .database // "item_master"')
+          USER=$(echo "$SEC" | jq -r '.username')
+          PASS=$(echo "$SEC" | jq -r '.password')
+
+          # Build Pomelo/MySQL connection string; enforce SSL
+          CONN="Server=$HOST;Port=$PORT;Database=$DB;User Id=$USER;Password=$PASS;SslMode=Required;"
+          echo "conn_string=$CONN" >> "$GITHUB_OUTPUT"
+
+      - name: Apply EF Core migrations to RDS
+        env:
+          MIGRATION_CONNECTION_STRING: ${{ steps.conn.outputs.conn_string }}
+        run: |
+          dotnet ef database update \
+            --project ItemMaster.Lambda/src/ItemMaster.Infrastructure \
+            --startup-project ItemMaster.Lambda/src/ItemMaster.Lambda \
+            --context ItemMaster.Infrastructure.Ef.ItemMasterDbContext
+
+      # --- DEPLOY LAMBDA CODE ---
       - name: Update Lambda code
         run: |
           aws lambda update-function-code \
