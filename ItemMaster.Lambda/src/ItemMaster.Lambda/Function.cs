@@ -41,11 +41,11 @@ public class Function
                 {
                     var serverVersion = ServerVersion.AutoDetect(connStr);
                     services.AddDbContext<ItemMasterDbContext>(o => o.UseMySql(connStr, serverVersion));
-                    services.AddScoped<IItemMasterLogRepository, EfItemMasterLogRepository>();
+                    services.AddScoped<IItemMasterLogRepository, MySqlItemMasterLogRepository>();
                 }
                 catch
                 {
-                    services.AddSingleton<IItemMasterLogRepository>(_ => new MySqlItemMasterLogRepository(connStr!));
+                    services.AddSingleton<IItemMasterLogRepository, InMemoryItemMasterLogRepository>();
                 }
             }
             else
