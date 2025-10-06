@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Serilog.Context;
+using Amazon.SQS;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
@@ -41,6 +42,7 @@ public class Function
         {
             services.AddDbContext<ItemMasterDbContext>(o => o.UseInMemoryDatabase("ItemMasterTest"));
             services.AddScoped<IItemMasterLogRepository, MySqlItemMasterLogRepository>();
+            services.AddScoped<IItemPublisher, InMemoryItemPublisher>();
             services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
             ServiceProvider = services.BuildServiceProvider();
             return;
@@ -48,7 +50,22 @@ public class Function
 
         services.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
         services.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
-        services.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
+        services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
+
+        var sqsUrl = Environment.GetEnvironmentVariable("SQS_URL");
+        if (string.IsNullOrWhiteSpace(sqsUrl))
+        {
+            _startupError = true;
+            _startupErrorMessage = "missing_sqs_url";
+        }
+        int maxRetries = 2;
+        if (int.TryParse(Environment.GetEnvironmentVariable("SQS_MAX_RETRIES"), out var parsedRetries) && parsedRetries >= 0 && parsedRetries <= 10)
+            maxRetries = parsedRetries;
+        if (!_startupError)
+        {
+            services.AddSingleton(new SqsPublisherOptions { QueueUrl = sqsUrl!, MaxRetries = maxRetries });
+            services.AddScoped<IItemPublisher, SqsItemPublisher>();
+        }
 
         string? connStr = null;
         try

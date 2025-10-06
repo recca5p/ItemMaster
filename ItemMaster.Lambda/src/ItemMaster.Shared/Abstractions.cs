@@ -64,3 +64,8 @@ public sealed class Result<T>
     public static Result<T> Ok(T value) => new() { Success = true, Value = value };
     public static Result<T> Fail(string error) => new() { Success = false, Error = error };
 }
+
+public interface IItemPublisher
+{
+    Task<int> PublishAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken ct = default);
+}
