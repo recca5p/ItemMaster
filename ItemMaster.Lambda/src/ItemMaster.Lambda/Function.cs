@@ -25,6 +25,8 @@ public class Function
     private static readonly ServiceProvider ServiceProvider;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static bool _migrationsApplied;
+    private static bool _startupError;
+    private static string? _startupErrorMessage;
 
     static Function()
     {
@@ -34,19 +36,29 @@ public class Function
         services.AddSingleton<IConfigProvider, EnvConfigProvider>();
         services.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
         services.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
-        services.AddLogging(b =>
+        services.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
+
+        string? connStr = null;
+        try
         {
-            b.ClearProviders();
-            b.AddSerilog();
-        });
-
-        using (var temp = services.BuildServiceProvider())
+            using var temp = services.BuildServiceProvider();
+            connStr = temp.GetRequiredService<IConnectionStringProvider>().GetMySqlConnectionString();
+        }
+        catch (Exception ex)
         {
-            string? connStr = null;
+            _startupError = true;
+            _startupErrorMessage = "conn_resolution";
+            Log.Error(ex, "ConnResolutionFailure");
+        }
 
-            try { connStr = temp.GetRequiredService<IConnectionStringProvider>().GetMySqlConnectionString(); } catch { }
-
-            if (!string.IsNullOrWhiteSpace(connStr))
+        if (!_startupError)
+        {
+            if (string.IsNullOrWhiteSpace(connStr))
+            {
+                _startupError = true;
+                _startupErrorMessage = "missing_connection_string";
+            }
+            else
             {
                 try
                 {
@@ -56,38 +68,39 @@ public class Function
                 }
                 catch (Exception ex)
                 {
-                    Log.Logger.Warning(ex, "DbContextConfigFailure falling back to in-memory repo");
-                    services.AddSingleton<IItemMasterLogRepository, InMemoryItemMasterLogRepository>();
+                    _startupError = true;
+                    _startupErrorMessage = "db_context_config";
+                    Log.Error(ex, "DbContextConfigFailure");
                 }
-            }
-            else
-            {
-                Log.Logger.Information("NoMySqlConnectionStringUsingInMemoryRepo");
-                services.AddSingleton<IItemMasterLogRepository, InMemoryItemMasterLogRepository>();
             }
         }
 
-        services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
+        if (!_startupError)
+            services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
 
         ServiceProvider = services.BuildServiceProvider();
 
-        var apply = Environment.GetEnvironmentVariable("APPLY_MIGRATIONS");
-        if (string.Equals(apply, "true", StringComparison.OrdinalIgnoreCase))
+        if (!_startupError)
         {
-            try
+            var apply = Environment.GetEnvironmentVariable("APPLY_MIGRATIONS");
+            if (string.Equals(apply, "true", StringComparison.OrdinalIgnoreCase))
             {
-                using var scope = ServiceProvider.CreateScope();
-                var ctx = scope.ServiceProvider.GetService<ItemMasterDbContext>();
-                if (ctx != null && !_migrationsApplied)
+                try
                 {
-                    ctx.Database.Migrate();
-                    _migrationsApplied = true;
-                    Log.Information("MigrationsAppliedOnce");
+                    using var scope = ServiceProvider.CreateScope();
+                    var ctx = scope.ServiceProvider.GetService<ItemMasterDbContext>();
+                    if (ctx != null && !_migrationsApplied)
+                    {
+                        ctx.Database.Migrate();
+                        _migrationsApplied = true;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "MigrationFailure");
+                catch (Exception ex)
+                {
+                    _startupError = true;
+                    _startupErrorMessage = "migration_failure";
+                    Log.Error(ex, "MigrationFailure");
+                }
             }
         }
     }
@@ -117,62 +130,52 @@ public class Function
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
     {
+        if (_startupError)
+        {
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 500,
+                Body = JsonSerializer.Serialize(new { error = _startupErrorMessage ?? "startup" }, JsonOptions),
+                Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
+            };
+        }
         using (LogContext.PushProperty("AwsRequestId", context.AwsRequestId))
         {
-            var scope = ServiceProvider.CreateScope();
-            try
+            using var scope = ServiceProvider.CreateScope();
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Function>>();
+            ProcessSkusRequest? input = null;
+            var bodyRaw = request.Body;
+            if (!string.IsNullOrWhiteSpace(bodyRaw))
             {
-                var logger = scope.ServiceProvider.GetRequiredService<ILogger<Function>>();
-                var bodyRaw = request.Body;
-                logger.LogInformation("HandlerStart hasBody={HasBody} isBase64={IsBase64}", !string.IsNullOrWhiteSpace(bodyRaw), request.IsBase64Encoded);
-
-                ProcessSkusRequest? input = null;
-                if (!string.IsNullOrWhiteSpace(bodyRaw))
+                if (request.IsBase64Encoded)
                 {
-                    if (request.IsBase64Encoded)
-                    {
-                        try
-                        {
-                            var bytes = Convert.FromBase64String(bodyRaw);
-                            bodyRaw = System.Text.Encoding.UTF8.GetString(bytes);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogWarning(ex, "Base64DecodeFailure");
-                        }
-                    }
                     try
                     {
-                        input = JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, JsonOptions);
+                        var bytes = Convert.FromBase64String(bodyRaw);
+                        bodyRaw = System.Text.Encoding.UTF8.GetString(bytes);
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning(ex, "BodyDeserializationFailure");
+                        logger.LogError(ex, "Base64DecodeFailure");
                     }
                 }
-                input ??= new ProcessSkusRequest();
-
-                var requestId = context.AwsRequestId ?? Guid.NewGuid().ToString("N");
-                using (LogContext.PushProperty("RequestId", requestId))
+                try
                 {
-                    logger.LogInformation("ParsedSkus count={Count}", input.Skus.Count);
-                    var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
-                    ProcessSkusResponse response;
-                    try
-                    {
-                        response = await useCase.ExecuteAsync(input.Skus, source: "api", requestId, CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "UseCaseFailure");
-                        return new APIGatewayProxyResponse
-                        {
-                            StatusCode = 500,
-                            Body = JsonSerializer.Serialize(new { error = "internal_error" }, JsonOptions),
-                            Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
-                        };
-                    }
-                    logger.LogInformation("HandlerComplete logged={Logged} failed={Failed}", response.Logged, response.Failed);
+                    input = JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, JsonOptions);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "BodyDeserializationFailure");
+                }
+            }
+            input ??= new ProcessSkusRequest();
+            var requestId = context.AwsRequestId ?? Guid.NewGuid().ToString("N");
+            using (LogContext.PushProperty("RequestId", requestId))
+            {
+                var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
+                try
+                {
+                    var response = await useCase.ExecuteAsync(input.Skus, "api", requestId, CancellationToken.None);
                     return new APIGatewayProxyResponse
                     {
                         StatusCode = 200,
@@ -180,10 +183,16 @@ public class Function
                         Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
                     };
                 }
-            }
-            finally
-            {
-                scope.Dispose();
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "UseCaseFailure");
+                    return new APIGatewayProxyResponse
+                    {
+                        StatusCode = 500,
+                        Body = JsonSerializer.Serialize(new { error = "internal_error" }, JsonOptions),
+                        Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
+                    };
+                }
             }
         }
     }

@@ -25,9 +25,8 @@ public sealed class ProcessSkusUseCase : IProcessSkusUseCase
 
     public async Task<ProcessSkusResponse> ExecuteAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken ct = default)
     {
+        // var list = skus.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => new Item(s)).ToList();
         var list = skus.ToList();
-        
-        _logger.LogInformation("SkuProcessingStart requestId={RequestId} source={Source} received={Count}", requestId, source, list.Count);
 
         var timestamp = _clock.UtcNow;
         var logRecords = list.Select(i => new ItemLogRecord(i, source, requestId, timestamp)).ToList();
@@ -38,7 +37,6 @@ public sealed class ProcessSkusUseCase : IProcessSkusUseCase
             try
             {
                 logged = await _logRepository.InsertLogsAsync(logRecords, ct);
-                _logger.LogInformation("SkuProcessingInsertSuccess requestId={RequestId} inserted={Inserted}", requestId, logged);
             }
             catch (Exception ex)
             {
@@ -46,8 +44,6 @@ public sealed class ProcessSkusUseCase : IProcessSkusUseCase
             }
         }
 
-        var response = new ProcessSkusResponse { Published = 0, Logged = logged, Failed = list.Count - logged };
-        _logger.LogInformation("SkuProcessingComplete requestId={RequestId} logged={Logged} failed={Failed}", requestId, response.Logged, response.Failed);
-        return response;
+        return new ProcessSkusResponse { Published = 0, Logged = logged, Failed = list.Count - logged };
     }
 }
