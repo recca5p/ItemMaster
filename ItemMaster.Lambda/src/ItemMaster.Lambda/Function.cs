@@ -31,9 +31,21 @@ public class Function
     static Function()
     {
         ConfigureSerilog();
+        var testMode = Environment.GetEnvironmentVariable("ITEMMASTER_TEST_MODE")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
         var services = new ServiceCollection();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IConfigProvider, EnvConfigProvider>();
+        services.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
+
+        if (testMode)
+        {
+            services.AddDbContext<ItemMasterDbContext>(o => o.UseInMemoryDatabase("ItemMasterTest"));
+            services.AddScoped<IItemMasterLogRepository, MySqlItemMasterLogRepository>();
+            services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
+            ServiceProvider = services.BuildServiceProvider();
+            return;
+        }
+
         services.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
         services.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
         services.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
