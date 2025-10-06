@@ -1,26 +1,50 @@
 using ItemMaster.Shared;
 using ItemMaster.Infrastructure.Ef;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace ItemMaster.Infrastructure;
 
 public sealed class MySqlItemMasterLogRepository : IItemMasterLogRepository
 {
     private readonly ItemMasterDbContext _db;
-    public MySqlItemMasterLogRepository(ItemMasterDbContext db) => _db = db;
+    private readonly ILogger<MySqlItemMasterLogRepository> _logger;
+    public MySqlItemMasterLogRepository(ItemMasterDbContext db, ILogger<MySqlItemMasterLogRepository> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task<int> InsertLogsAsync(IEnumerable<ItemLogRecord> records, CancellationToken ct = default)
     {
         var list = records.ToList();
-        if (list.Count == 0) return 0;
-        var entities = list.Select(r => new ItemLogEntry
+        if (list.Count == 0)
         {
-            Sku = r.Sku,
-            Source = r.Source,
-            RequestId = r.RequestId,
-            TimestampUtc = r.TimestampUtc
-        }).ToList();
-        await _db.ItemLogs.AddRangeAsync(entities, ct);
-        return await _db.SaveChangesAsync(ct);
+            _logger.LogDebug("InsertSkipEmpty");
+            return 0;
+        }
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var entities = list.Select(r => new ItemLogEntry
+            {
+                Sku = r.Sku,
+                Source = r.Source,
+                RequestId = r.RequestId,
+                TimestampUtc = r.TimestampUtc
+            }).ToList();
+            await _db.ItemLogs.AddRangeAsync(entities, ct);
+            var written = await _db.SaveChangesAsync(ct);
+            sw.Stop();
+            _logger.LogInformation("InsertSuccess count={Count} elapsedMs={ElapsedMs}", list.Count, sw.ElapsedMilliseconds);
+            return written;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger.LogError(ex, "InsertFailure count={Count} elapsedMs={ElapsedMs}", list.Count, sw.ElapsedMilliseconds);
+            throw;
+        }
     }
 }
 
