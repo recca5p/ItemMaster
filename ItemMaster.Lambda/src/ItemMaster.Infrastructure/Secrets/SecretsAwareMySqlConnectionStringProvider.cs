@@ -38,7 +38,7 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
         _attempted = true;
 
         _logger.LogInformation("ConnResolveStart fullEnvPresent={FullEnv} host={Host} db={Db} port={Port} ssl={Ssl} secretId={SecretId}",
-            !string.IsNullOrWhiteSpace(_fullConnEnv), _host, _dbName, _port ?? "(null)", _sslMode ?? "(null)", _credsSecret);
+            !string.IsNullOrWhiteSpace(_fullConnEnv), _host, _dbName, _port ?? "(null)", _sslMode ?? "(null)", _credsSecret ?? "(null)");
 
         if (!string.IsNullOrWhiteSpace(_fullConnEnv))
         {
@@ -113,26 +113,34 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
         var wasJson = false;
         try
         {
-            using var doc = JsonDocument.Parse(secret);
-            wasJson = true;
-            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            var trimmed = secret.TrimStart();
+            if (trimmed.StartsWith("{"))
             {
-                user = GetFirstString(doc.RootElement, "username", "user", "Uid", "login");
-                pwd = GetFirstString(doc.RootElement, "password", "pwd", "pass", "secret");
-                var rawConn = GetFirstString(doc.RootElement, "connectionString", "conn", "full");
-                _logger.LogInformation("SecretJsonParsed userFound={UserFound} pwdFound={PwdFound} rawConnFound={RawConnFound} userVal={UserVal}", user != null, pwd != null, rawConn != null, user);
-                if (rawConn is not null) return rawConn;
+                using var doc = JsonDocument.Parse(secret);
+                wasJson = true;
+                if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    user = GetFirstString(doc.RootElement, "username", "user", "Uid", "login");
+                    pwd = GetFirstString(doc.RootElement, "password", "pwd", "pass", "secret");
+                    var rawConn = GetFirstString(doc.RootElement, "connectionString", "conn", "full");
+                    _logger.LogInformation("SecretJsonParsed userFound={UserFound} pwdFound={PwdFound} rawConnFound={RawConnFound} userVal={UserVal}", user != null, pwd != null, rawConn != null, user);
+                    if (rawConn is not null) return rawConn; // full connection string inside JSON
+                    if (user is not null && pwd is not null)
+                        return null; // signal credentials extracted; caller will assemble
+                }
             }
         }
         catch (Exception ex)
         {
             _logger.LogInformation(ex, "SecretJsonParseFailed wasJson={WasJson} rawPreview={Preview}", wasJson, secret.Length > 40 ? secret.Substring(0,40) : secret);
+            // fall through to other heuristics
         }
 
-        if (secret.Contains(":" ) && !secret.Contains("Server="))
+        // Only attempt colon form if we still don't have both user & pwd
+        if ((user is null || pwd is null) && secret.Contains(":") && !secret.Contains("Server="))
         {
             var parts = secret.Split(':', 2);
-            if (parts.Length == 2)
+            if (parts.Length == 2 && !parts[0].Contains("\"username\"")) // avoid splitting raw JSON again
             {
                 user = parts[0];
                 pwd = parts[1];
@@ -144,8 +152,11 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
         if (secret.Contains("Server=") && secret.Contains("Uid=") && secret.Contains("Pwd="))
         {
             _logger.LogInformation("SecretLooksLikeFullConnectionString length={Length}", secret.Length);
+            return secret;
         }
-        return secret;
+
+        // If we reach here and user/pwd still null, return original so caller can decide (likely failure)
+        return (user is null || pwd is null) ? secret : null;
     }
 
     private static string? GetFirstString(JsonElement obj, params string[] names)
