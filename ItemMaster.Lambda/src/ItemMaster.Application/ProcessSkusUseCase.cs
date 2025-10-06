@@ -1,6 +1,7 @@
 using ItemMaster.Contracts;
 using ItemMaster.Domain;
 using ItemMaster.Shared;
+using Microsoft.Extensions.Logging;
 
 namespace ItemMaster.Application;
 
@@ -13,22 +14,23 @@ public sealed class ProcessSkusUseCase : IProcessSkusUseCase
 {
     private readonly IItemMasterLogRepository _logRepository;
     private readonly IClock _clock;
+    private readonly ILogger<ProcessSkusUseCase> _logger;
 
-    public ProcessSkusUseCase(IItemMasterLogRepository logRepository, IClock clock)
+    public ProcessSkusUseCase(IItemMasterLogRepository logRepository, IClock clock, ILogger<ProcessSkusUseCase> logger)
     {
         _logRepository = logRepository;
         _clock = clock;
+        _logger = logger;
     }
 
     public async Task<ProcessSkusResponse> ExecuteAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken ct = default)
     {
-        var list = skus
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Select(s => new Item(s))
-            .ToList();
+        var list = skus.ToList();
+        
+        _logger.LogInformation("SkuProcessingStart requestId={RequestId} source={Source} received={Count}", requestId, source, list.Count);
 
         var timestamp = _clock.UtcNow;
-        var logRecords = list.Select(i => new ItemLogRecord(i.Sku, source, requestId, timestamp)).ToList();
+        var logRecords = list.Select(i => new ItemLogRecord(i, source, requestId, timestamp)).ToList();
 
         int logged = 0;
         if (logRecords.Count > 0)
@@ -36,17 +38,16 @@ public sealed class ProcessSkusUseCase : IProcessSkusUseCase
             try
             {
                 logged = await _logRepository.InsertLogsAsync(logRecords, ct);
+                _logger.LogInformation("SkuProcessingInsertSuccess requestId={RequestId} inserted={Inserted}", requestId, logged);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "SkuProcessingInsertFailure requestId={RequestId} attempted={Attempted}", requestId, logRecords.Count);
             }
         }
 
-        return new ProcessSkusResponse
-        {
-            Published = 0,
-            Logged = logged,
-            Failed = list.Count - logged
-        };
+        var response = new ProcessSkusResponse { Published = 0, Logged = logged, Failed = list.Count - logged };
+        _logger.LogInformation("SkuProcessingComplete requestId={RequestId} logged={Logged} failed={Failed}", requestId, response.Logged, response.Failed);
+        return response;
     }
 }

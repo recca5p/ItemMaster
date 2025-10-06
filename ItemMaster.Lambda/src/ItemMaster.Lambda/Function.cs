@@ -11,6 +11,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Amazon.SecretsManager;
 using Pomelo.EntityFrameworkCore.MySql.Storage;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Formatting.Compact;
+using Serilog.Context;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
@@ -24,11 +28,17 @@ public class Function
 
     static Function()
     {
+        ConfigureSerilog();
         var services = new ServiceCollection();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IConfigProvider, EnvConfigProvider>();
         services.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
         services.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
+        services.AddLogging(b =>
+        {
+            b.ClearProviders();
+            b.AddSerilog();
+        });
 
         using (var temp = services.BuildServiceProvider())
         {
@@ -43,13 +53,15 @@ public class Function
                     services.AddDbContext<ItemMasterDbContext>(o => o.UseMySql(connStr, serverVersion));
                     services.AddScoped<IItemMasterLogRepository, MySqlItemMasterLogRepository>();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Log.Logger.Warning(ex, "DbContextConfigFailure falling back to in-memory repo");
                     services.AddSingleton<IItemMasterLogRepository, InMemoryItemMasterLogRepository>();
                 }
             }
             else
             {
+                Log.Logger.Information("NoMySqlConnectionStringUsingInMemoryRepo");
                 services.AddSingleton<IItemMasterLogRepository, InMemoryItemMasterLogRepository>();
             }
         }
@@ -69,72 +81,109 @@ public class Function
                 {
                     ctx.Database.Migrate();
                     _migrationsApplied = true;
+                    Log.Information("MigrationsAppliedOnce");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Startup] Migration failed: {ex.Message}");
+                Log.Error(ex, "MigrationFailure");
             }
+        }
+    }
+
+    private static void ConfigureSerilog()
+    {
+        if (Log.Logger is not Serilog.Core.Logger l || l == Serilog.Core.Logger.None)
+        {
+            var level = Environment.GetEnvironmentVariable("LOG_LEVEL") ?? "Information";
+            var parsed = level switch
+            {
+                string s when s.Equals("debug", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Debug,
+                string s when s.Equals("verbose", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Verbose,
+                string s when s.Equals("warning", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Warning,
+                string s when s.Equals("error", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Error,
+                string s when s.Equals("fatal", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Fatal,
+                _ => Serilog.Events.LogEventLevel.Information
+            };
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Is(parsed)
+                .Enrich.FromLogContext()
+                .Enrich.WithProperty("Service", "ItemMasterLambda")
+                .WriteTo.Console(new RenderedCompactJsonFormatter())
+                .CreateLogger();
         }
     }
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
     {
-        var logger = context.Logger;
-        ProcessSkusRequest? input = null;
-        try
+        using (LogContext.PushProperty("AwsRequestId", context.AwsRequestId))
         {
-            if (!string.IsNullOrWhiteSpace(request.Body))
+            var scope = ServiceProvider.CreateScope();
+            try
             {
-                var bodyText = request.Body;
-                if (request.IsBase64Encoded)
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<Function>>();
+                var bodyRaw = request.Body;
+                logger.LogInformation("HandlerStart hasBody={HasBody} isBase64={IsBase64}", !string.IsNullOrWhiteSpace(bodyRaw), request.IsBase64Encoded);
+
+                ProcessSkusRequest? input = null;
+                if (!string.IsNullOrWhiteSpace(bodyRaw))
                 {
+                    if (request.IsBase64Encoded)
+                    {
+                        try
+                        {
+                            var bytes = Convert.FromBase64String(bodyRaw);
+                            bodyRaw = System.Text.Encoding.UTF8.GetString(bytes);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Base64DecodeFailure");
+                        }
+                    }
                     try
                     {
-                        var bytes = Convert.FromBase64String(bodyText);
-                        bodyText = System.Text.Encoding.UTF8.GetString(bytes);
+                        input = JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, JsonOptions);
                     }
                     catch (Exception ex)
                     {
-                        logger.LogLine($"Failed to base64 decode body: {ex.Message}");
+                        logger.LogWarning(ex, "BodyDeserializationFailure");
                     }
                 }
-                input = JsonSerializer.Deserialize<ProcessSkusRequest>(bodyText, JsonOptions);
+                input ??= new ProcessSkusRequest();
+
+                var requestId = context.AwsRequestId ?? Guid.NewGuid().ToString("N");
+                using (LogContext.PushProperty("RequestId", requestId))
+                {
+                    logger.LogInformation("ParsedSkus count={Count}", input.Skus.Count);
+                    var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
+                    ProcessSkusResponse response;
+                    try
+                    {
+                        response = await useCase.ExecuteAsync(input.Skus, source: "api", requestId, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "UseCaseFailure");
+                        return new APIGatewayProxyResponse
+                        {
+                            StatusCode = 500,
+                            Body = JsonSerializer.Serialize(new { error = "internal_error" }, JsonOptions),
+                            Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
+                        };
+                    }
+                    logger.LogInformation("HandlerComplete logged={Logged} failed={Failed}", response.Logged, response.Failed);
+                    return new APIGatewayProxyResponse
+                    {
+                        StatusCode = 200,
+                        Body = JsonSerializer.Serialize(response, JsonOptions),
+                        Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
+                    };
+                }
+            }
+            finally
+            {
+                scope.Dispose();
             }
         }
-        catch (Exception ex)
-        {
-            logger.LogLine($"Failed to deserialize body: {ex.Message}");
-        }
-
-        input ??= new ProcessSkusRequest();
-
-        var requestId = context.AwsRequestId ?? Guid.NewGuid().ToString("N");
-        using var scope = ServiceProvider.CreateScope();
-        var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
-
-        ProcessSkusResponse response;
-        try
-        {
-            response = await useCase.ExecuteAsync(input.Skus, source: "api", requestId, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogLine($"Use case failed: {ex.Message}");
-            return new APIGatewayProxyResponse
-            {
-                StatusCode = 500,
-                Body = JsonSerializer.Serialize(new { error = "internal_error" }, JsonOptions),
-                Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
-            };
-        }
-
-        var body = JsonSerializer.Serialize(response, JsonOptions);
-        return new APIGatewayProxyResponse
-        {
-            StatusCode = 200,
-            Body = body,
-            Headers = new Dictionary<string, string>{{"Content-Type","application/json"}}
-        };
     }
 }
