@@ -83,40 +83,40 @@ jobs:
             --publish
           aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      # - name: Install jq
+      #   run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Enable APPLY_MIGRATIONS
-        run: |
-          aws lambda get-function-configuration \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --query 'Environment.Variables' --output json > /tmp/env.json
-          jq -c '. + {"APPLY_MIGRATIONS":"true"}' /tmp/env.json | jq -c '{Variables: .}' > /tmp/env-on.json
-          aws lambda update-function-configuration \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --environment file:///tmp/env-on.json
-          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
+      # - name: Enable APPLY_MIGRATIONS
+      #   run: |
+      #     aws lambda get-function-configuration \
+      #       --function-name "$LAMBDA_FUNCTION_NAME" \
+      #       --query 'Environment.Variables' --output json > /tmp/env.json
+      #     jq -c '. + {"APPLY_MIGRATIONS":"true"}' /tmp/env.json | jq -c '{Variables: .}' > /tmp/env-on.json
+      #     aws lambda update-function-configuration \
+      #       --function-name "$LAMBDA_FUNCTION_NAME" \
+      #       --environment file:///tmp/env-on.json
+      #     aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
       
-      - name: Invoke Lambda to run migrations
-        run: |
-          echo '{}' > /tmp/payload.json
-          aws lambda invoke \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --payload fileb:///tmp/payload.json \
-            --cli-binary-format raw-in-base64-out \
-            /tmp/out.json >/dev/null || true
-          aws logs tail "/aws/lambda/${LAMBDA_FUNCTION_NAME}" --since 10m --format short || true
-          cat /tmp/out.json || true
+      # - name: Invoke Lambda to run migrations
+      #   run: |
+      #     echo '{}' > /tmp/payload.json
+      #     aws lambda invoke \
+      #       --function-name "$LAMBDA_FUNCTION_NAME" \
+      #       --payload fileb:///tmp/payload.json \
+      #       --cli-binary-format raw-in-base64-out \
+      #       /tmp/out.json >/dev/null || true
+      #     aws logs tail "/aws/lambda/${LAMBDA_FUNCTION_NAME}" --since 10m --format short || true
+      #     cat /tmp/out.json || true
       
-      - name: Disable APPLY_MIGRATIONS
-        run: |
-          aws lambda get-function-configuration \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --query 'Environment.Variables' --output json > /tmp/env.json
-          jq -c 'del(.APPLY_MIGRATIONS)' /tmp/env.json | jq -c '{Variables: .}' > /tmp/env-off.json
-          aws lambda update-function-configuration \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --environment file:///tmp/env-off.json
-          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
+      # - name: Disable APPLY_MIGRATIONS
+      #   run: |
+      #     aws lambda get-function-configuration \
+      #       --function-name "$LAMBDA_FUNCTION_NAME" \
+      #       --query 'Environment.Variables' --output json > /tmp/env.json
+      #     jq -c 'del(.APPLY_MIGRATIONS)' /tmp/env.json | jq -c '{Variables: .}' > /tmp/env-off.json
+      #     aws lambda update-function-configuration \
+      #       --function-name "$LAMBDA_FUNCTION_NAME" \
+      #       --environment file:///tmp/env-off.json
+      #     aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
 
 
