@@ -61,9 +61,29 @@ public class Function
         int maxRetries = 2;
         if (int.TryParse(Environment.GetEnvironmentVariable("SQS_MAX_RETRIES"), out var parsedRetries) && parsedRetries >= 0 && parsedRetries <= 10)
             maxRetries = parsedRetries;
+        
+        int baseDelayMs = 1000;
+        if (int.TryParse(Environment.GetEnvironmentVariable("SQS_BASE_DELAY_MS"), out var parsedDelay) && parsedDelay > 0)
+            baseDelayMs = parsedDelay;
+            
+        double backoffMultiplier = 2.0;
+        if (double.TryParse(Environment.GetEnvironmentVariable("SQS_BACKOFF_MULTIPLIER"), out var parsedMultiplier) && parsedMultiplier > 1.0)
+            backoffMultiplier = parsedMultiplier;
+
+        int batchSize = 100;
+        if (int.TryParse(Environment.GetEnvironmentVariable("SQS_BATCH_SIZE"), out var parsedBatch) && parsedBatch > 1)
+            batchSize = parsedBatch;
+            
         if (!_startupError)
         {
-            services.AddSingleton(new SqsPublisherOptions { QueueUrl = sqsUrl!, MaxRetries = maxRetries });
+            services.AddSingleton(new SqsItemPublisherOptions 
+            { 
+                QueueUrl = sqsUrl!, 
+                MaxRetries = maxRetries,
+                BaseDelayMs = baseDelayMs,
+                BackoffMultiplier = backoffMultiplier,
+                BatchSize = batchSize
+            });
             services.AddScoped<IItemPublisher, SqsItemPublisher>();
         }
 

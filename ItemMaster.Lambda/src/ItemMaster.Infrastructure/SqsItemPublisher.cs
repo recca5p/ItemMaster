@@ -6,10 +6,13 @@ using System.Text.Json;
 
 namespace ItemMaster.Infrastructure;
 
-public sealed class SqsPublisherOptions
+public class SqsItemPublisherOptions
 {
     public string QueueUrl { get; init; } = string.Empty;
-    public int MaxRetries { get; init; } = 2;
+    public int MaxRetries { get; init; } = 3;
+    public int BaseDelayMs { get; init; } = 1000;
+    public double BackoffMultiplier { get; init; } = 2.0;
+    public int BatchSize { get; init; } = 100;
 }
 
 public sealed class SqsItemPublisher : IItemPublisher
@@ -18,65 +21,124 @@ public sealed class SqsItemPublisher : IItemPublisher
     private readonly ILogger<SqsItemPublisher> _logger;
     private readonly string _queueUrl;
     private readonly int _maxRetries;
+    private readonly int _baseDelayMs;
+    private readonly double _backoffMultiplier;
+    private readonly int _batchSize;
 
-    public SqsItemPublisher(IAmazonSQS sqs, ILogger<SqsItemPublisher> logger, SqsPublisherOptions options)
+    public SqsItemPublisher(IAmazonSQS sqs, SqsItemPublisherOptions options, ILogger<SqsItemPublisher> logger)
     {
-        _sqs = sqs;
-        _logger = logger;
+        _sqs = sqs ?? throw new ArgumentNullException(nameof(sqs));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _queueUrl = options.QueueUrl;
         _maxRetries = options.MaxRetries;
+        _baseDelayMs = options.BaseDelayMs;
+        _backoffMultiplier = options.BackoffMultiplier;
+        _batchSize = options.BatchSize;
         if (string.IsNullOrWhiteSpace(_queueUrl)) throw new ArgumentException("QueueUrl required", nameof(options.QueueUrl));
     }
 
-    public async Task<int> PublishAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken ct = default)
+    public async Task<int> PublishAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken cancellationToken)
     {
         var list = skus.ToList();
         if (list.Count == 0) return 0;
+
         var total = 0;
-        const int batchSize = 10;
-        for (int i = 0; i < list.Count; i += batchSize)
+        for (int i = 0; i < list.Count; i += _batchSize)
         {
-            var batch = list.Skip(i).Take(batchSize).ToList();
+            var batch = list.Skip(i).Take(_batchSize).ToList();
             var entries = batch.Select((sku, idx) => new SendMessageBatchRequestEntry
             {
                 Id = ($"{i}_{idx}").Replace('-', '_'),
                 MessageBody = JsonSerializer.Serialize(new { sku, source, requestId })
             }).ToList();
-            var attempt = 0;
-            while (true)
-            {
-                try
-                {
-                    var resp = await _sqs.SendMessageBatchAsync(new SendMessageBatchRequest
-                    {
-                        QueueUrl = _queueUrl,
-                        Entries = entries
-                    }, ct);
-                    total += resp.Successful.Count;
-                    if (resp.Failed.Count > 0)
-                        _logger.LogError("SqsPartialFailure failed={Failed} batchStart={Start} attempt={Attempt}", resp.Failed.Count, i, attempt);
-                    break;
-                }
-                catch (Exception ex) when (attempt < _maxRetries)
-                {
-                    attempt++;
-                    _logger.LogError(ex, "SqsBatchRetry batchStart={Start} attempt={Attempt}", i, attempt);
-                    await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), ct);
-                    continue;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SqsBatchFailure batchStart={Start}", i);
-                    break;
-                }
-            }
+
+            var publishedCount = await PublishBatchWithRetryAsync(entries, cancellationToken);
+            total += publishedCount;
         }
         return total;
+    }
+
+    private async Task<int> PublishBatchWithRetryAsync(List<SendMessageBatchRequestEntry> entries, CancellationToken cancellationToken)
+    {
+        var attempt = 0;
+        var remainingEntries = entries.ToList();
+
+        while (attempt <= _maxRetries && remainingEntries.Count > 0)
+        {
+            try
+            {
+                if (attempt > 0)
+                {
+                    // Exponential backoff: 1s, 2s, 4s, 8s, etc.
+                    var delayMs = (int)(_baseDelayMs * Math.Pow(_backoffMultiplier, attempt - 1));
+                    _logger.LogInformation("Retrying SQS publish attempt {Attempt} after {DelayMs}ms delay", attempt, delayMs);
+                    await Task.Delay(delayMs, cancellationToken);
+                }
+
+                var request = new SendMessageBatchRequest
+                {
+                    QueueUrl = _queueUrl,
+                    Entries = remainingEntries
+                };
+
+                var response = await _sqs.SendMessageBatchAsync(request, cancellationToken);
+                
+                var successfulCount = response.Successful.Count;
+                _logger.LogInformation("Successfully published {Count} messages in batch", successfulCount);
+
+                // Handle failed messages for retry
+                if (response.Failed.Count > 0)
+                {
+                    var failedIds = response.Failed.Select(f => f.Id).ToHashSet();
+                    remainingEntries = remainingEntries.Where(e => failedIds.Contains(e.Id)).ToList();
+                    
+                    _logger.LogWarning("Failed to publish {Count} messages, will retry. Failed IDs: {FailedIds}", 
+                        response.Failed.Count, string.Join(", ", failedIds));
+                    
+                    foreach (var failed in response.Failed)
+                    {
+                        _logger.LogError("Message {Id} failed: {Code} - {Message}", 
+                            failed.Id, failed.Code, failed.Message);
+                    }
+                }
+                else
+                {
+                    // All messages succeeded
+                    return successfulCount;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SQS publish attempt {Attempt} failed completely", attempt);
+                
+                if (attempt == _maxRetries)
+                {
+                    _logger.LogError("All {MaxRetries} retry attempts exhausted for SQS publish", _maxRetries);
+                    throw;
+                }
+            }
+
+            attempt++;
+        }
+
+        // Return the count of entries that were originally successful before retries
+        return entries.Count - remainingEntries.Count;
     }
 }
 
 public sealed class InMemoryItemPublisher : IItemPublisher
 {
-    public Task<int> PublishAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken ct = default)
-        => Task.FromResult(skus.Count());
+    private readonly ILogger<InMemoryItemPublisher> _logger;
+
+    public InMemoryItemPublisher(ILogger<InMemoryItemPublisher> logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public Task<int> PublishAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken cancellationToken)
+    {
+        var count = skus.Count();
+        _logger.LogInformation("Published {Count} items to in-memory queue", count);
+        return Task.FromResult(count);
+    }
 }
