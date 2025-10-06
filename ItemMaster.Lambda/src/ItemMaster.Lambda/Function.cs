@@ -43,6 +43,8 @@ public class Function
         using (var temp = services.BuildServiceProvider())
         {
             string? connStr = null;
+            Log.Logger.Information("Try to get connection string from IConnectionStringProvider");
+
             try { connStr = temp.GetRequiredService<IConnectionStringProvider>().GetMySqlConnectionString(); } catch { }
 
             if (!string.IsNullOrWhiteSpace(connStr))

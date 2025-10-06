@@ -48,11 +48,6 @@ public interface IConnectionStringProvider
     string? GetMySqlConnectionString();
 }
 
-public sealed class EnvConnectionStringProvider : IConnectionStringProvider
-{
-    public string? GetMySqlConnectionString() => Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
-}
-
 public sealed class Result
 {
     public bool Success { get; init; }
