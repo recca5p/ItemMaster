@@ -3,6 +3,7 @@ using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration; // added
 
 namespace ItemMaster.Infrastructure.Secrets;
 
@@ -10,7 +11,6 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
 {
     private readonly IAmazonSecretsManager _secrets;
     private readonly ILogger<SecretsAwareMySqlConnectionStringProvider> _logger;
-    private readonly string? _fullConnEnv;
     private readonly string? _host;
     private readonly string? _dbName;
     private readonly string? _sslMode;
@@ -19,16 +19,15 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
     private string? _cached;
     private bool _attempted;
 
-    public SecretsAwareMySqlConnectionStringProvider(IAmazonSecretsManager secrets, ILogger<SecretsAwareMySqlConnectionStringProvider> logger)
+    public SecretsAwareMySqlConnectionStringProvider(IAmazonSecretsManager secrets, ILogger<SecretsAwareMySqlConnectionStringProvider> logger, IConfiguration? configuration = null)
     {
         _secrets = secrets;
         _logger = logger;
-        _fullConnEnv = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
-        _host = Environment.GetEnvironmentVariable("MYSQL_HOST");
-        _dbName = Environment.GetEnvironmentVariable("MYSQL_DB_NAME");
-        _sslMode = Environment.GetEnvironmentVariable("MYSQL_SSL_MODE");
-        _port = Environment.GetEnvironmentVariable("MYSQL_PORT");
-        _credsSecret = Environment.GetEnvironmentVariable("MY_SQL_CREDITIAL");
+        _host = configuration?["mysql:host"]; // required via SSM
+        _dbName = configuration?["mysql:db"];
+        _sslMode = configuration?["mysql:ssl_mode"];
+        _port = configuration?["mysql:port"];
+        _credsSecret = configuration?["mysql:secret_arn"];
     }
 
     public string? GetMySqlConnectionString()
@@ -36,13 +35,6 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
         if (_cached is not null) return _cached;
         if (_attempted) return null;
         _attempted = true;
-
-        if (!string.IsNullOrWhiteSpace(_fullConnEnv))
-        {
-            _cached = _fullConnEnv;
-            _logger.LogInformation("DbConnResolved source=env");
-            return _cached;
-        }
 
         var assembled = TryAssemble();
         if (assembled is not null)

@@ -16,6 +16,10 @@ using Serilog;
 using Serilog.Formatting.Compact;
 using Serilog.Context;
 using Amazon.SQS;
+using Microsoft.Extensions.Configuration;
+using Amazon.Extensions.Configuration.SystemsManager;
+using Amazon.Extensions.NETCore.Setup;
+using Amazon;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
@@ -28,18 +32,20 @@ public class Function
     private static bool _migrationsApplied;
     private static bool _startupError;
     private static string? _startupErrorMessage;
+    private static IConfiguration? _configuration;
+
+    private static string? GetConfigValue(string key) => _configuration?[key];
 
     static Function()
     {
-        ConfigureSerilog();
         var testMode = Environment.GetEnvironmentVariable("ITEMMASTER_TEST_MODE")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
-        var services = new ServiceCollection();
-        services.AddSingleton<IClock, SystemClock>();
-        services.AddSingleton<IConfigProvider, EnvConfigProvider>();
-        services.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
-
         if (testMode)
         {
+            ConfigureSerilog(null);
+            var services = new ServiceCollection();
+            services.AddSingleton<IClock, SystemClock>();
+            services.AddSingleton<IConfigProvider, EnvConfigProvider>();
+            services.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
             services.AddDbContext<ItemMasterDbContext>(o => o.UseInMemoryDatabase("ItemMasterTest"));
             services.AddScoped<IItemMasterLogRepository, MySqlItemMasterLogRepository>();
             services.AddScoped<IItemPublisher, InMemoryItemPublisher>();
@@ -48,56 +54,95 @@ public class Function
             return;
         }
 
-        services.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
-        services.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
-        services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
+        try
+        {
+            var envRaw = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
+            var envLower = envRaw.ToLowerInvariant();
+            var basePath = Environment.GetEnvironmentVariable("CONFIG_BASE") ?? "/im";
+            var ssmPath = $"{basePath}/{envLower}/";
+            var regionName = Environment.GetEnvironmentVariable("AWS_REGION") ?? "ap-southeast-1";
+            var awsOptions = new AWSOptions { Region = RegionEndpoint.GetBySystemName(regionName) };
 
-        var sqsUrl = Environment.GetEnvironmentVariable("SQS_URL");
+            var builder = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", optional: true)
+                .AddJsonFile($"appsettings.{envRaw}.json", optional: true)
+                .AddEnvironmentVariables() // still allows only the retained vars
+                .AddSystemsManager(src =>
+                {
+                    src.Path = ssmPath;
+                    src.AwsOptions = awsOptions;
+                    src.Optional = true;
+                    src.ReloadAfter = TimeSpan.FromMinutes(5);
+                });
+            _configuration = builder.Build();
+        }
+        catch (Exception ex)
+        {
+            _startupError = true;
+            _startupErrorMessage = "config_build_failure";
+            ConfigureSerilog(null);
+            Log.Error(ex, "ConfigBuildFailure");
+        }
+
+        ConfigureSerilog(_configuration);
+
+        var servicesFull = new ServiceCollection();
+        servicesFull.AddSingleton<IClock, SystemClock>();
+        servicesFull.AddSingleton<IConfigProvider, EnvConfigProvider>();
+        if (_configuration != null)
+            servicesFull.AddSingleton(_configuration);
+        servicesFull.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
+        servicesFull.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
+        servicesFull.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
+        servicesFull.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
+
+        // SQS config strictly from configuration (Parameter Store / JSON)
+        string? sqsUrl = GetConfigValue("sqs:url");
         if (string.IsNullOrWhiteSpace(sqsUrl))
         {
             _startupError = true;
             _startupErrorMessage = "missing_sqs_url";
         }
-        int maxRetries = 2;
-        if (int.TryParse(Environment.GetEnvironmentVariable("SQS_MAX_RETRIES"), out var parsedRetries) && parsedRetries >= 0 && parsedRetries <= 10)
-            maxRetries = parsedRetries;
-        
-        int baseDelayMs = 1000;
-        if (int.TryParse(Environment.GetEnvironmentVariable("SQS_BASE_DELAY_MS"), out var parsedDelay) && parsedDelay > 0)
-            baseDelayMs = parsedDelay;
-            
-        double backoffMultiplier = 2.0;
-        if (double.TryParse(Environment.GetEnvironmentVariable("SQS_BACKOFF_MULTIPLIER"), out var parsedMultiplier) && parsedMultiplier > 1.0)
-            backoffMultiplier = parsedMultiplier;
 
-        int batchSize = 100;
-        if (int.TryParse(Environment.GetEnvironmentVariable("SQS_BATCH_SIZE"), out var parsedBatch) && parsedBatch > 1)
-            batchSize = parsedBatch;
-            
+        static int ParseInt(string? raw, int def, Func<int, bool>? predicate = null)
+            => (int.TryParse(raw, out var v) && (predicate == null || predicate(v))) ? v : def;
+        static double ParseDouble(string? raw, double def, Func<double, bool>? predicate = null)
+            => (double.TryParse(raw, out var v) && (predicate == null || predicate(v))) ? v : def;
+
+        int maxRetries = ParseInt(GetConfigValue("sqs:max_retries"), 2, v => v >= 0 && v <= 10);
+        var baseDelayRaw = GetConfigValue("sqs:base_delay_ms") ?? GetConfigValue("sqs:base_deplay_ms");
+        int baseDelayMs = ParseInt(baseDelayRaw, 1000, v => v > 0);
+        var backoffRaw = GetConfigValue("sqs:backoff_multiplier") ?? GetConfigValue("sqs:backoff_multilier");
+        double backoffMultiplier = ParseDouble(backoffRaw, 2.0, v => v > 1.0);
+        int batchSize = ParseInt(GetConfigValue("sqs:batch_size"), 100, v => v > 0 && v <= 500);
+
         if (!_startupError)
         {
-            services.AddSingleton(new SqsItemPublisherOptions 
-            { 
-                QueueUrl = sqsUrl!, 
+            servicesFull.AddSingleton(new SqsItemPublisherOptions
+            {
+                QueueUrl = sqsUrl!,
                 MaxRetries = maxRetries,
                 BaseDelayMs = baseDelayMs,
                 BackoffMultiplier = backoffMultiplier,
                 BatchSize = batchSize
             });
-            services.AddScoped<IItemPublisher, SqsItemPublisher>();
+            servicesFull.AddScoped<IItemPublisher, SqsItemPublisher>();
         }
 
         string? connStr = null;
-        try
+        if (!_startupError)
         {
-            using var temp = services.BuildServiceProvider();
-            connStr = temp.GetRequiredService<IConnectionStringProvider>().GetMySqlConnectionString();
-        }
-        catch (Exception ex)
-        {
-            _startupError = true;
-            _startupErrorMessage = "conn_resolution";
-            Log.Error(ex, "ConnResolutionFailure");
+            try
+            {
+                using var temp = servicesFull.BuildServiceProvider();
+                connStr = temp.GetRequiredService<IConnectionStringProvider>().GetMySqlConnectionString();
+            }
+            catch (Exception ex)
+            {
+                _startupError = true;
+                _startupErrorMessage = "conn_resolution";
+                Log.Error(ex, "ConnResolutionFailure");
+            }
         }
 
         if (!_startupError)
@@ -112,8 +157,8 @@ public class Function
                 try
                 {
                     var serverVersion = ServerVersion.AutoDetect(connStr);
-                    services.AddDbContext<ItemMasterDbContext>(o => o.UseMySql(connStr, serverVersion));
-                    services.AddScoped<IItemMasterLogRepository, MySqlItemMasterLogRepository>();
+                    servicesFull.AddDbContext<ItemMasterDbContext>(o => o.UseMySql(connStr, serverVersion));
+                    servicesFull.AddScoped<IItemMasterLogRepository, MySqlItemMasterLogRepository>();
                 }
                 catch (Exception ex)
                 {
@@ -125,13 +170,13 @@ public class Function
         }
 
         if (!_startupError)
-            services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
+            servicesFull.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
 
-        ServiceProvider = services.BuildServiceProvider();
+        ServiceProvider = servicesFull.BuildServiceProvider();
 
         if (!_startupError)
         {
-            var apply = Environment.GetEnvironmentVariable("APPLY_MIGRATIONS");
+            var apply = Environment.GetEnvironmentVariable("APPLY_MIGRATIONS") ?? Environment.GetEnvironmentVariable("APPLY_MIGATIONS");
             if (string.Equals(apply, "true", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -154,27 +199,25 @@ public class Function
         }
     }
 
-    private static void ConfigureSerilog()
+    private static void ConfigureSerilog(IConfiguration? configuration)
     {
-        if (Log.Logger is not Serilog.Core.Logger l || l == Serilog.Core.Logger.None)
+        if (Log.Logger is Serilog.Core.Logger l && l != Serilog.Core.Logger.None) return;
+        var levelRaw = configuration?["log_level"] ?? "Information"; // no env fallback anymore
+        var parsed = levelRaw.ToLowerInvariant() switch
         {
-            var level = Environment.GetEnvironmentVariable("LOG_LEVEL") ?? "Information";
-            var parsed = level switch
-            {
-                string s when s.Equals("debug", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Debug,
-                string s when s.Equals("verbose", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Verbose,
-                string s when s.Equals("warning", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Warning,
-                string s when s.Equals("error", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Error,
-                string s when s.Equals("fatal", StringComparison.OrdinalIgnoreCase) => Serilog.Events.LogEventLevel.Fatal,
-                _ => Serilog.Events.LogEventLevel.Information
-            };
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Is(parsed)
-                .Enrich.FromLogContext()
-                .Enrich.WithProperty("Service", "ItemMasterLambda")
-                .WriteTo.Console(new RenderedCompactJsonFormatter())
-                .CreateLogger();
-        }
+            "debug" => Serilog.Events.LogEventLevel.Debug,
+            "verbose" => Serilog.Events.LogEventLevel.Verbose,
+            "warning" => Serilog.Events.LogEventLevel.Warning,
+            "error" => Serilog.Events.LogEventLevel.Error,
+            "fatal" => Serilog.Events.LogEventLevel.Fatal,
+            _ => Serilog.Events.LogEventLevel.Information
+        };
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Is(parsed)
+            .Enrich.FromLogContext()
+            .Enrich.WithProperty("Service", "ItemMasterLambda")
+            .WriteTo.Console(new RenderedCompactJsonFormatter())
+            .CreateLogger();
     }
 
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)

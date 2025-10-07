@@ -9,10 +9,15 @@ namespace ItemMaster.Lambda.Tests;
 
 public class FunctionTest
 {
+    static FunctionTest()
+    {
+        // Ensure test mode for all tests to bypass SSM / external calls
+        Environment.SetEnvironmentVariable("ITEMMASTER_TEST_MODE", "true");
+    }
+
     [Fact]
     public async Task ProcessSkus_ReturnsLoggedCount()
     {
-        Environment.SetEnvironmentVariable("ITEMMASTER_TEST_MODE", "true");
         var function = new Function();
         var resp = await InvokeAsync(function, new ProcessSkusRequest { Skus = new List<string> { "SKU1", "SKU2", "SKU3" } });
         Assert.Equal(200, resp.StatusCode);
@@ -40,7 +45,6 @@ public class FunctionTest
     [Fact]
     public async Task Base64EncodedBody_ParsesAndLogs()
     {
-        Environment.SetEnvironmentVariable("ITEMMASTER_TEST_MODE", "true");
         var function = new Function();
         var resp = await InvokeAsync(function, new ProcessSkusRequest { Skus = new List<string> { "B1", "B2" } }, base64: true);
         Assert.Equal(200, resp.StatusCode);
@@ -54,7 +58,6 @@ public class FunctionTest
     [Fact]
     public async Task InvalidJson_ReturnsZeroLogged()
     {
-        Environment.SetEnvironmentVariable("ITEMMASTER_TEST_MODE", "true");
         var function = new Function();
         var ctx = new TestLambdaContext();
         var request = new APIGatewayProxyRequest { Body = "{not-json" };
