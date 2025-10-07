@@ -5,11 +5,6 @@ using Microsoft.Extensions.Logging;
 
 namespace ItemMaster.Application;
 
-public interface IProcessSkusUseCase
-{
-    Task<ProcessSkusResponse> ExecuteAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken ct = default);
-}
-
 public sealed class ProcessSkusUseCase : IProcessSkusUseCase
 {
     private readonly IItemMasterLogRepository _logRepository;

@@ -1,14 +1,3 @@
 namespace ItemMaster.Contracts;
 
-public sealed class ProcessSkusRequest
-{
-    public List<string> Skus { get; set; } = new();
-}
-
-public sealed class ProcessSkusResponse
-{
-    public int Published { get; init; }
-    public int Logged { get; init; }
-    public int Failed { get; init; }
-}
-
+// This file has been intentionally left empty. Classes formerly here have been split into individual files per one-class-per-file guideline.

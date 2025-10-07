@@ -6,15 +6,6 @@ using System.Text.Json;
 
 namespace ItemMaster.Infrastructure;
 
-public class SqsItemPublisherOptions
-{
-    public string QueueUrl { get; init; } = string.Empty;
-    public int MaxRetries { get; init; } = 3;
-    public int BaseDelayMs { get; init; } = 1000;
-    public double BackoffMultiplier { get; init; } = 2.0;
-    public int BatchSize { get; init; } = 100;
-}
-
 public sealed class SqsItemPublisher : IItemPublisher
 {
     private readonly IAmazonSQS _sqs;
@@ -123,22 +114,5 @@ public sealed class SqsItemPublisher : IItemPublisher
 
         // Return the count of entries that were originally successful before retries
         return entries.Count - remainingEntries.Count;
-    }
-}
-
-public sealed class InMemoryItemPublisher : IItemPublisher
-{
-    private readonly ILogger<InMemoryItemPublisher> _logger;
-
-    public InMemoryItemPublisher(ILogger<InMemoryItemPublisher> logger)
-    {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
-
-    public Task<int> PublishAsync(IEnumerable<string> skus, string source, string requestId, CancellationToken cancellationToken)
-    {
-        var count = skus.Count();
-        _logger.LogInformation("Published {Count} items to in-memory queue", count);
-        return Task.FromResult(count);
     }
 }
