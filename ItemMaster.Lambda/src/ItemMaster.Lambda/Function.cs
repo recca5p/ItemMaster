@@ -33,21 +33,10 @@ public class Function
     private static bool _startupError;
     private static string? _startupErrorMessage;
     private static IConfiguration? _configuration;
-
     private static string? GetConfigValue(string key) => _configuration?[key];
 
     static Function()
     {
-        if (Log.Logger == Serilog.Core.Logger.None)
-        {
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Information()
-                .Enrich.FromLogContext()
-                .Enrich.WithProperty("Service", "ItemMasterLambda")
-                .WriteTo.Console(new RenderedCompactJsonFormatter())
-                .CreateLogger();
-        }
-        Log.Information("Lambda init starting...");
         var testMode = Environment.GetEnvironmentVariable("ITEMMASTER_TEST_MODE")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
         if (testMode)
         {
@@ -66,28 +55,21 @@ public class Function
 
         try
         {
-            Log.Information("Get env config");
-
             var envRaw = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
             var envLower = envRaw.ToLowerInvariant();
             var basePath = Environment.GetEnvironmentVariable("CONFIG_BASE") ?? "/im";
-            var ssmPath = $"{basePath}/{envLower}/";
             var regionName = Environment.GetEnvironmentVariable("AWS_REGION") ?? "ap-southeast-1";
-            var awsOptions = new AWSOptions { Region = RegionEndpoint.GetBySystemName(regionName) };
-
             var builder = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json", optional: true)
                 .AddJsonFile($"appsettings.{envRaw}.json", optional: true)
-                .AddEnvironmentVariables() // still allows only the retained vars
+                .AddEnvironmentVariables()
                 .AddSystemsManager(src =>
                 {
-                    src.Path = ssmPath;
-                    src.AwsOptions = awsOptions;
+                    src.Path = $"{basePath}/{envLower}/";
+                    src.AwsOptions = new AWSOptions { Region = RegionEndpoint.GetBySystemName(regionName) };
                     src.Optional = true;
                     src.ReloadAfter = TimeSpan.FromMinutes(5);
                 });
-            Log.Information("Ssm: {ssmPath}", ssmPath);
-
             _configuration = builder.Build();
         }
         catch (Exception ex)
@@ -97,55 +79,19 @@ public class Function
             ConfigureSerilog(null);
             Log.Error(ex, "ConfigBuildFailure");
         }
-        Log.Information("start log cinfig");
 
         ConfigureSerilog(_configuration);
-
-        if (!_startupError && _configuration is not null)
-        {
-            try
-            {
-                var envRawNow = _configuration["DOTNET_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
-                var basePathNow = Environment.GetEnvironmentVariable("CONFIG_BASE") ?? "/im";
-                var envLowerNow = envRawNow.ToLowerInvariant();
-                var ssmPathNow = $"{basePathNow}/{envLowerNow}/";
-                var regionNameNow = Environment.GetEnvironmentVariable("AWS_REGION") ?? "ap-southeast-1";
-                Log.Information("ConfigInit env={Env} ssm_path={SsmPath} region={Region} base_path={BasePath}", envRawNow, ssmPathNow, regionNameNow, basePathNow);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "ConfigInitLogFailure");
-            }
-        }
-
-        Log.Information("start service collection");
 
         var servicesFull = new ServiceCollection();
         servicesFull.AddSingleton<IClock, SystemClock>();
         servicesFull.AddSingleton<IConfigProvider, EnvConfigProvider>();
-        if (_configuration != null)
-            servicesFull.AddSingleton(_configuration);
+        if (_configuration != null) servicesFull.AddSingleton(_configuration);
         servicesFull.AddLogging(b => { b.ClearProviders(); b.AddSerilog(); });
         servicesFull.AddSingleton<IAmazonSecretsManager>(_ => new AmazonSecretsManagerClient());
         servicesFull.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
         servicesFull.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
 
-        // SQS config strictly from configuration (Parameter Store / JSON)
-        Log.Information("Start fetch sqsUrl");
         string? sqsUrl = GetConfigValue("sqs:url");
-        Log.Information("ConfigFetch key=sqs:url present={Present}", !string.IsNullOrWhiteSpace(sqsUrl));
-
-        var maxRetriesRaw = GetConfigValue("sqs:max_retries");
-        Log.Information("ConfigFetch key=sqs:max_retries raw={Raw}", maxRetriesRaw);
-        var baseDelayPrimaryRaw = GetConfigValue("sqs:base_delay_ms");
-        var baseDelayTypoRaw = GetConfigValue("sqs:base_deplay_ms");
-        Log.Information("ConfigFetch key=sqs:base_delay_ms raw={Primary} key_typo=sqs:base_deplay_ms raw={Typo}", baseDelayPrimaryRaw, baseDelayTypoRaw);
-        var backoffPrimaryRaw = GetConfigValue("sqs:backoff_multiplier");
-        var backoffTypoRaw = GetConfigValue("sqs:backoff_multilier");
-        Log.Information("ConfigFetch key=sqs:backoff_multiplier raw={Primary} key_typo=sqs:backoff_multilier raw={Typo}", backoffPrimaryRaw, backoffTypoRaw);
-        var batchSizeRaw = GetConfigValue("sqs:batch_size");
-        Log.Information("ConfigFetch key=sqs:batch_size raw={Raw}", batchSizeRaw);
-
         if (string.IsNullOrWhiteSpace(sqsUrl))
         {
             _startupError = true;
@@ -153,27 +99,23 @@ public class Function
             Log.Error("StartupValidationFailure reason=missing_sqs_url");
         }
 
-        static int ParseInt(string? raw, int def, Func<int, bool>? predicate = null)
-            => (int.TryParse(raw, out var v) && (predicate == null || predicate(v))) ? v : def;
-        static double ParseDouble(string? raw, double def, Func<double, bool>? predicate = null)
-            => (double.TryParse(raw, out var v) && (predicate == null || predicate(v))) ? v : def;
+        static int ParseInt(string? raw, int def, Func<int, bool>? predicate = null) => (int.TryParse(raw, out var v) && (predicate == null || predicate(v))) ? v : def;
+        static double ParseDouble(string? raw, double def, Func<double, bool>? predicate = null) => (double.TryParse(raw, out var v) && (predicate == null || predicate(v))) ? v : def;
+
+        var maxRetriesRaw = GetConfigValue("sqs:max_retries");
+        var baseDelayRaw = GetConfigValue("sqs:base_delay_ms") ?? GetConfigValue("sqs:base_deplay_ms");
+        var backoffRaw = GetConfigValue("sqs:backoff_multiplier") ?? GetConfigValue("sqs:backoff_multilier");
+        var batchSizeRaw = GetConfigValue("sqs:batch_size");
 
         int maxRetries = ParseInt(maxRetriesRaw, 2, v => v >= 0 && v <= 10);
-        var baseDelayRaw = baseDelayPrimaryRaw ?? baseDelayTypoRaw;
         int baseDelayMs = ParseInt(baseDelayRaw, 1000, v => v > 0);
-        var backoffRaw = backoffPrimaryRaw ?? backoffTypoRaw;
         double backoffMultiplier = ParseDouble(backoffRaw, 2.0, v => v > 1.0);
         int batchSize = ParseInt(batchSizeRaw, 100, v => v > 0 && v <= 500);
 
-        Log.Information("ConfigParsed sqs:url_present={UrlPresent} max_retries={MaxRetries} base_delay_ms={BaseDelay} backoff_multiplier={Backoff} batch_size={BatchSize}", !string.IsNullOrWhiteSpace(sqsUrl), maxRetries, baseDelayMs, backoffMultiplier, batchSize);
-
-        // MySQL diagnostic (do not attempt secret fetch here, only log presence of config keys)
         var mysqlHost = GetConfigValue("mysql:host");
         var mysqlDb = GetConfigValue("mysql:db");
-        var mysqlPort = GetConfigValue("mysql:port");
-        var mysqlSsl = GetConfigValue("mysql:ssl_mode");
         var mysqlSecretArn = GetConfigValue("mysql:secret_arn");
-        Log.Information("ConfigFetch mysql: host_present={HostPresent} db_present={DbPresent} port_raw={Port} ssl_mode_raw={Ssl} secret_arn_present={SecretPresent}", !string.IsNullOrWhiteSpace(mysqlHost), !string.IsNullOrWhiteSpace(mysqlDb), mysqlPort, mysqlSsl, !string.IsNullOrWhiteSpace(mysqlSecretArn));
+        Log.Information("StartupConfig sqs_url_present={Sqs} max_retries={MaxRetries} base_delay_ms={BaseDelay} backoff={Backoff} batch_size={Batch} mysql_host={HasHost} mysql_db={HasDb} mysql_secret={HasSecret}", !string.IsNullOrWhiteSpace(sqsUrl), maxRetries, baseDelayMs, backoffMultiplier, batchSize, !string.IsNullOrWhiteSpace(mysqlHost), !string.IsNullOrWhiteSpace(mysqlDb), !string.IsNullOrWhiteSpace(mysqlSecretArn));
 
         if (!_startupError)
         {
@@ -228,8 +170,7 @@ public class Function
             }
         }
 
-        if (!_startupError)
-            servicesFull.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
+        if (!_startupError) servicesFull.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
 
         ServiceProvider = servicesFull.BuildServiceProvider();
 
@@ -261,7 +202,7 @@ public class Function
     private static void ConfigureSerilog(IConfiguration? configuration)
     {
         if (Log.Logger is Serilog.Core.Logger l && l != Serilog.Core.Logger.None) return;
-        var levelRaw = configuration?["log_level"] ?? "Information"; // no env fallback anymore
+        var levelRaw = configuration?["log_level"] ?? "Information";
         var parsed = levelRaw.ToLowerInvariant() switch
         {
             "debug" => Serilog.Events.LogEventLevel.Debug,

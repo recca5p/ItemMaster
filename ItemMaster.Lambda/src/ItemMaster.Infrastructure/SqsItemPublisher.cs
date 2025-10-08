@@ -60,7 +60,6 @@ public sealed class SqsItemPublisher : IItemPublisher
             {
                 if (attempt > 0)
                 {
-                    // Exponential backoff: 1s, 2s, 4s, 8s, etc.
                     var delayMs = (int)(_baseDelayMs * Math.Pow(_backoffMultiplier, attempt - 1));
                     _logger.LogInformation("Retrying SQS publish attempt {Attempt} after {DelayMs}ms delay", attempt, delayMs);
                     await Task.Delay(delayMs, cancellationToken);
@@ -73,46 +72,35 @@ public sealed class SqsItemPublisher : IItemPublisher
                 };
 
                 var response = await _sqs.SendMessageBatchAsync(request, cancellationToken);
-                
                 var successfulCount = response.Successful.Count;
                 _logger.LogInformation("Successfully published {Count} messages in batch", successfulCount);
 
-                // Handle failed messages for retry
                 if (response.Failed.Count > 0)
                 {
                     var failedIds = response.Failed.Select(f => f.Id).ToHashSet();
                     remainingEntries = remainingEntries.Where(e => failedIds.Contains(e.Id)).ToList();
-                    
-                    _logger.LogWarning("Failed to publish {Count} messages, will retry. Failed IDs: {FailedIds}", 
-                        response.Failed.Count, string.Join(", ", failedIds));
-                    
+                    _logger.LogWarning("Failed to publish {Count} messages, will retry. Failed IDs: {FailedIds}", response.Failed.Count, string.Join(", ", failedIds));
                     foreach (var failed in response.Failed)
                     {
-                        _logger.LogError("Message {Id} failed: {Code} - {Message}", 
-                            failed.Id, failed.Code, failed.Message);
+                        _logger.LogError("Message {Id} failed: {Code} - {Message}", failed.Id, failed.Code, failed.Message);
                     }
                 }
                 else
                 {
-                    // All messages succeeded
                     return successfulCount;
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "SQS publish attempt {Attempt} failed completely", attempt);
-                
                 if (attempt == _maxRetries)
                 {
                     _logger.LogError("All {MaxRetries} retry attempts exhausted for SQS publish", _maxRetries);
                     throw;
                 }
             }
-
             attempt++;
         }
-
-        // Return the count of entries that were originally successful before retries
         return entries.Count - remainingEntries.Count;
     }
 }

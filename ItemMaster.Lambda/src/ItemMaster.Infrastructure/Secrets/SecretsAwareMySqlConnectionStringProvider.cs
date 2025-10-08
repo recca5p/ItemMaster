@@ -3,7 +3,7 @@ using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration; // added
+using Microsoft.Extensions.Configuration;
 
 namespace ItemMaster.Infrastructure.Secrets;
 
@@ -23,7 +23,7 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
     {
         _secrets = secrets;
         _logger = logger;
-        _host = configuration?["mysql:host"]; // required via SSM
+        _host = configuration?["mysql:host"];
         _dbName = configuration?["mysql:db"];
         _sslMode = configuration?["mysql:ssl_mode"];
         _port = configuration?["mysql:port"];
@@ -35,7 +35,6 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
         if (_cached is not null) return _cached;
         if (_attempted) return null;
         _attempted = true;
-
         var assembled = TryAssemble();
         if (assembled is not null)
         {
@@ -43,7 +42,6 @@ public sealed class SecretsAwareMySqlConnectionStringProvider : IConnectionStrin
             _logger.LogInformation("DbConnResolved source=assembled host={Host} db={Db}", _host, _dbName);
             return _cached;
         }
-
         _logger.LogError("DbConnResolveFailed host={Host} db={Db} secretId={SecretId}", _host, _dbName, _credsSecret);
         return null;
     }

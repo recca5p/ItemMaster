@@ -11,7 +11,6 @@ public class FunctionTest
 {
     static FunctionTest()
     {
-        // Ensure test mode for all tests to bypass SSM / external calls
         Environment.SetEnvironmentVariable("ITEMMASTER_TEST_MODE", "true");
     }
 
@@ -74,19 +73,12 @@ public class FunctionTest
     {
         var json = JsonSerializer.Serialize(request, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var body = json;
-        
         if (base64)
         {
             var bytes = Encoding.UTF8.GetBytes(json);
             body = Convert.ToBase64String(bytes);
         }
-
-        var apiRequest = new APIGatewayProxyRequest 
-        { 
-            Body = body,
-            IsBase64Encoded = base64
-        };
-        
+        var apiRequest = new APIGatewayProxyRequest { Body = body, IsBase64Encoded = base64 };
         var context = new TestLambdaContext();
         return await function.FunctionHandler(apiRequest, context);
     }
