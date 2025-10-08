@@ -86,6 +86,23 @@ public class Function
 
         ConfigureSerilog(_configuration);
 
+        if (!_startupError && _configuration is not null)
+        {
+            try
+            {
+                var envRawNow = _configuration["DOTNET_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
+                var basePathNow = Environment.GetEnvironmentVariable("CONFIG_BASE") ?? "/im";
+                var envLowerNow = envRawNow.ToLowerInvariant();
+                var ssmPathNow = $"{basePathNow}/{envLowerNow}/";
+                var regionNameNow = Environment.GetEnvironmentVariable("AWS_REGION") ?? "ap-southeast-1";
+                Log.Information("ConfigInit env={Env} ssm_path={SsmPath} region={Region} base_path={BasePath}", envRawNow, ssmPathNow, regionNameNow, basePathNow);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "ConfigInitLogFailure");
+            }
+        }
+
         var servicesFull = new ServiceCollection();
         servicesFull.AddSingleton<IClock, SystemClock>();
         servicesFull.AddSingleton<IConfigProvider, EnvConfigProvider>();
@@ -98,10 +115,24 @@ public class Function
 
         // SQS config strictly from configuration (Parameter Store / JSON)
         string? sqsUrl = GetConfigValue("sqs:url");
+        Log.Information("ConfigFetch key=sqs:url present={Present}", !string.IsNullOrWhiteSpace(sqsUrl));
+
+        var maxRetriesRaw = GetConfigValue("sqs:max_retries");
+        Log.Information("ConfigFetch key=sqs:max_retries raw={Raw}", maxRetriesRaw);
+        var baseDelayPrimaryRaw = GetConfigValue("sqs:base_delay_ms");
+        var baseDelayTypoRaw = GetConfigValue("sqs:base_deplay_ms");
+        Log.Information("ConfigFetch key=sqs:base_delay_ms raw={Primary} key_typo=sqs:base_deplay_ms raw={Typo}", baseDelayPrimaryRaw, baseDelayTypoRaw);
+        var backoffPrimaryRaw = GetConfigValue("sqs:backoff_multiplier");
+        var backoffTypoRaw = GetConfigValue("sqs:backoff_multilier");
+        Log.Information("ConfigFetch key=sqs:backoff_multiplier raw={Primary} key_typo=sqs:backoff_multilier raw={Typo}", backoffPrimaryRaw, backoffTypoRaw);
+        var batchSizeRaw = GetConfigValue("sqs:batch_size");
+        Log.Information("ConfigFetch key=sqs:batch_size raw={Raw}", batchSizeRaw);
+
         if (string.IsNullOrWhiteSpace(sqsUrl))
         {
             _startupError = true;
             _startupErrorMessage = "missing_sqs_url";
+            Log.Error("StartupValidationFailure reason=missing_sqs_url");
         }
 
         static int ParseInt(string? raw, int def, Func<int, bool>? predicate = null)
@@ -109,12 +140,22 @@ public class Function
         static double ParseDouble(string? raw, double def, Func<double, bool>? predicate = null)
             => (double.TryParse(raw, out var v) && (predicate == null || predicate(v))) ? v : def;
 
-        int maxRetries = ParseInt(GetConfigValue("sqs:max_retries"), 2, v => v >= 0 && v <= 10);
-        var baseDelayRaw = GetConfigValue("sqs:base_delay_ms") ?? GetConfigValue("sqs:base_deplay_ms");
+        int maxRetries = ParseInt(maxRetriesRaw, 2, v => v >= 0 && v <= 10);
+        var baseDelayRaw = baseDelayPrimaryRaw ?? baseDelayTypoRaw;
         int baseDelayMs = ParseInt(baseDelayRaw, 1000, v => v > 0);
-        var backoffRaw = GetConfigValue("sqs:backoff_multiplier") ?? GetConfigValue("sqs:backoff_multilier");
+        var backoffRaw = backoffPrimaryRaw ?? backoffTypoRaw;
         double backoffMultiplier = ParseDouble(backoffRaw, 2.0, v => v > 1.0);
-        int batchSize = ParseInt(GetConfigValue("sqs:batch_size"), 100, v => v > 0 && v <= 500);
+        int batchSize = ParseInt(batchSizeRaw, 100, v => v > 0 && v <= 500);
+
+        Log.Information("ConfigParsed sqs:url_present={UrlPresent} max_retries={MaxRetries} base_delay_ms={BaseDelay} backoff_multiplier={Backoff} batch_size={BatchSize}", !string.IsNullOrWhiteSpace(sqsUrl), maxRetries, baseDelayMs, backoffMultiplier, batchSize);
+
+        // MySQL diagnostic (do not attempt secret fetch here, only log presence of config keys)
+        var mysqlHost = GetConfigValue("mysql:host");
+        var mysqlDb = GetConfigValue("mysql:db");
+        var mysqlPort = GetConfigValue("mysql:port");
+        var mysqlSsl = GetConfigValue("mysql:ssl_mode");
+        var mysqlSecretArn = GetConfigValue("mysql:secret_arn");
+        Log.Information("ConfigFetch mysql: host_present={HostPresent} db_present={DbPresent} port_raw={Port} ssl_mode_raw={Ssl} secret_arn_present={SecretPresent}", !string.IsNullOrWhiteSpace(mysqlHost), !string.IsNullOrWhiteSpace(mysqlDb), mysqlPort, mysqlSsl, !string.IsNullOrWhiteSpace(mysqlSecretArn));
 
         if (!_startupError)
         {
