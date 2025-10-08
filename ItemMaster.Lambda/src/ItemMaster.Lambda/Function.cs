@@ -97,6 +97,7 @@ public class Function
             ConfigureSerilog(null);
             Log.Error(ex, "ConfigBuildFailure");
         }
+        Log.Information("start log cinfig");
 
         ConfigureSerilog(_configuration);
 
