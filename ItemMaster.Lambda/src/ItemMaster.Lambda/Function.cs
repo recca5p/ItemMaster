@@ -38,7 +38,16 @@ public class Function
 
     static Function()
     {
-        Log.Information("Start function init");
+        if (Log.Logger == Serilog.Core.Logger.None)
+        {
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .Enrich.FromLogContext()
+                .Enrich.WithProperty("Service", "ItemMasterLambda")
+                .WriteTo.Console(new RenderedCompactJsonFormatter())
+                .CreateLogger();
+        }
+        Log.Information("Lambda init starting...");
         var testMode = Environment.GetEnvironmentVariable("ITEMMASTER_TEST_MODE")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
         if (testMode)
         {
