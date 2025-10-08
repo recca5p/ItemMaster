@@ -56,6 +56,8 @@ public class Function
 
         try
         {
+            Log.Information("Get env config");
+
             var envRaw = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
             var envLower = envRaw.ToLowerInvariant();
             var basePath = Environment.GetEnvironmentVariable("CONFIG_BASE") ?? "/im";
@@ -74,6 +76,8 @@ public class Function
                     src.Optional = true;
                     src.ReloadAfter = TimeSpan.FromMinutes(5);
                 });
+            Log.Information("Ssm: {ssmPath}", ssmPath);
+
             _configuration = builder.Build();
         }
         catch (Exception ex)
@@ -114,6 +118,7 @@ public class Function
         servicesFull.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
 
         // SQS config strictly from configuration (Parameter Store / JSON)
+        Log.Information("Start fetch sqsUrl");
         string? sqsUrl = GetConfigValue("sqs:url");
         Log.Information("ConfigFetch key=sqs:url present={Present}", !string.IsNullOrWhiteSpace(sqsUrl));
 
