@@ -38,6 +38,7 @@ public class Function
 
     static Function()
     {
+        Log.Information("Start function init");
         var testMode = Environment.GetEnvironmentVariable("ITEMMASTER_TEST_MODE")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
         if (testMode)
         {
