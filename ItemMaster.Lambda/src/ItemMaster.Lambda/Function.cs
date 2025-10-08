@@ -117,6 +117,8 @@ public class Function
             }
         }
 
+        Log.Information("start service collection");
+
         var servicesFull = new ServiceCollection();
         servicesFull.AddSingleton<IClock, SystemClock>();
         servicesFull.AddSingleton<IConfigProvider, EnvConfigProvider>();
