@@ -303,7 +303,7 @@ public class Function
             .CreateLogger();
     }
 
-    public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
+    public async Task<APIGatewayProxyResponse> FunctionHandler(object input, ILambdaContext context)
     {
         if (_startupError)
             return new APIGatewayProxyResponse
@@ -314,8 +314,34 @@ public class Function
             };
 
         using var scope = ServiceProvider.CreateScope();
-        var requestSourceDetector = scope.ServiceProvider.GetRequiredService<IRequestSourceDetector>();
-        var requestSource = requestSourceDetector.DetectSource(request);
+        
+        string inputJson;
+        try
+        {
+            inputJson = input is string str ? str : JsonSerializer.Serialize(input, JsonOptions);
+        }
+        catch
+        {
+            inputJson = "{}";
+        }
+
+        var requestSource = DetectRequestSource(inputJson);
+        
+        if (requestSource == RequestSource.CicdHealthCheck)
+        {
+            return new APIGatewayProxyResponse
+            {
+                StatusCode = 200,
+                Body = JsonSerializer.Serialize(new 
+                { 
+                    status = "healthy",
+                    message = "Lambda function is operational",
+                    timestamp = DateTime.UtcNow,
+                    source = "health_check"
+                }, JsonOptions),
+                Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
+            };
+        }
 
         var observabilityService = scope.ServiceProvider.GetRequiredService<IObservabilityService>();
         var traceId = observabilityService.GetCurrentTraceId();
@@ -334,55 +360,78 @@ public class Function
                     logger.LogInformation("Processing request from source: {RequestSource} | TraceId: {TraceId}",
                         requestSource, traceId);
 
-                    ProcessSkusRequest? input = null;
-                    var bodyRaw = request.Body;
-                    if (!string.IsNullOrWhiteSpace(bodyRaw))
+                    ProcessSkusRequest? processRequest = null;
+                    
+                    if (requestSource == RequestSource.EventBridge)
                     {
-                        if (request.IsBase64Encoded)
-                            try
-                            {
-                                var bytes = Convert.FromBase64String(bodyRaw);
-                                bodyRaw = Encoding.UTF8.GetString(bytes);
-                            }
-                            catch (Exception ex)
-                            {
-                                logger.LogError(ex, "Base64DecodeFailure | TraceId: {TraceId}", traceId);
-                                return new APIGatewayProxyResponse
-                                {
-                                    StatusCode = 400,
-                                    Body = JsonSerializer.Serialize(new { error = "base64_decode_failure", traceId },
-                                        JsonOptions),
-                                    Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
-                                };
-                            }
-
                         try
                         {
-                            input = JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, JsonOptions);
+                            var eventDoc = JsonDocument.Parse(inputJson);
+                            if (eventDoc.RootElement.TryGetProperty("detail", out var detail))
+                            {
+                                processRequest = JsonSerializer.Deserialize<ProcessSkusRequest>(
+                                    detail.GetRawText(), JsonOptions);
+                            }
                         }
                         catch (Exception ex)
                         {
-                            logger.LogError(ex, "JsonDeserializationFailure | TraceId: {TraceId}", traceId);
-                            // In test mode, treat invalid JSON as empty request to satisfy tests
-                            if (Environment.GetEnvironmentVariable("ITEMMASTER_TEST_MODE")
-                                    ?.Equals("true", StringComparison.OrdinalIgnoreCase) == true)
-                                input = new ProcessSkusRequest();
-                            else
-                                return new APIGatewayProxyResponse
+                            logger.LogWarning(ex, "Failed to parse EventBridge detail, using default request");
+                        }
+                    }
+                    else if (requestSource == RequestSource.ApiGateway)
+                    {
+                        // API Gateway request - parse body
+                        try
+                        {
+                            var apiGwRequest = JsonSerializer.Deserialize<APIGatewayProxyRequest>(inputJson, JsonOptions);
+                            var bodyRaw = apiGwRequest?.Body;
+                            
+                            if (!string.IsNullOrWhiteSpace(bodyRaw))
+                            {
+                                if (apiGwRequest?.IsBase64Encoded == true)
                                 {
-                                    StatusCode = 400,
-                                    Body = JsonSerializer.Serialize(
-                                        new { error = "json_deserialization_failure", traceId },
-                                        JsonOptions),
-                                    Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
-                                };
+                                    try
+                                    {
+                                        var bytes = Convert.FromBase64String(bodyRaw);
+                                        bodyRaw = Encoding.UTF8.GetString(bytes);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        logger.LogError(ex, "Base64DecodeFailure | TraceId: {TraceId}", traceId);
+                                        return new APIGatewayProxyResponse
+                                        {
+                                            StatusCode = 400,
+                                            Body = JsonSerializer.Serialize(new { error = "base64_decode_failure", traceId },
+                                                JsonOptions),
+                                            Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
+                                        };
+                                    }
+                                }
+
+                                processRequest = JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, JsonOptions);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "ApiGatewayRequestParseFailure | TraceId: {TraceId}", traceId);
+                        }
+                    }
+                    else
+                    {
+                        try
+                        {
+                            processRequest = JsonSerializer.Deserialize<ProcessSkusRequest>(inputJson, JsonOptions);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "DirectInvocationParseFailure | TraceId: {TraceId}", traceId);
                         }
                     }
 
-                    input ??= new ProcessSkusRequest();
+                    processRequest ??= new ProcessSkusRequest();
 
                     var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
-                    var result = await useCase.ExecuteAsync(input, requestSource, traceId,
+                    var result = await useCase.ExecuteAsync(processRequest, requestSource, traceId,
                         context.RemainingTime > TimeSpan.FromSeconds(30)
                             ? new CancellationTokenSource(context.RemainingTime.Subtract(TimeSpan.FromSeconds(30)))
                                 .Token
@@ -420,6 +469,46 @@ public class Function
                     ["memoryLimitInMB"] = context.MemoryLimitInMB,
                     ["remainingTimeMs"] = context.RemainingTime.TotalMilliseconds
                 });
+        }
+    }
+
+    private static RequestSource DetectRequestSource(string inputJson)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(inputJson) || 
+                inputJson.Trim() == "{}" || 
+                inputJson.Trim() == "null")
+            {
+                return RequestSource.CicdHealthCheck;
+            }
+
+            var doc = JsonDocument.Parse(inputJson);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("source", out var source))
+            {
+                var sourceStr = source.GetString()?.ToLowerInvariant() ?? "";
+                if (sourceStr.StartsWith("aws.") || 
+                    sourceStr.Contains("eventbridge") ||
+                    root.TryGetProperty("detail-type", out _))
+                {
+                    return RequestSource.EventBridge;
+                }
+            }
+
+            if (root.TryGetProperty("requestContext", out var requestContext) &&
+                requestContext.TryGetProperty("requestId", out _) &&
+                requestContext.TryGetProperty("stage", out _))
+            {
+                return RequestSource.ApiGateway;
+            }
+
+            return RequestSource.Lambda;
+        }
+        catch
+        {
+            return RequestSource.Lambda;
         }
     }
 }
