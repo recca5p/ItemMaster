@@ -314,21 +314,38 @@ public class Function
             };
 
         using var scope = ServiceProvider.CreateScope();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Function>>();
         
+        // Convert input to JSON string for analysis
         string inputJson;
+        string inputType = input?.GetType().FullName ?? "null";
         try
         {
             inputJson = input is string str ? str : JsonSerializer.Serialize(input, JsonOptions);
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to serialize input, using empty JSON");
             inputJson = "{}";
         }
 
-        var requestSource = DetectRequestSource(inputJson);
+        // Log detailed input information for debugging
+        logger.LogInformation("REQUEST_DEBUG: InputType={InputType}, InputLength={InputLength}, InputPreview={InputPreview}", 
+            inputType, 
+            inputJson?.Length ?? 0, 
+            inputJson?.Length > 500 ? inputJson.Substring(0, 500) + "..." : inputJson);
+
+        // Detect the request source by analyzing the input structure
+        var requestSource = DetectRequestSource(inputJson, logger);
         
+        logger.LogInformation("REQUEST_SOURCE_DETECTED: Source={RequestSource}, AwsRequestId={AwsRequestId}", 
+            requestSource, 
+            context.AwsRequestId);
+
+        // For health checks, return immediately
         if (requestSource == RequestSource.CicdHealthCheck)
         {
+            logger.LogInformation("HEALTH_CHECK: Returning healthy response");
             return new APIGatewayProxyResponse
             {
                 StatusCode = 200,
@@ -337,7 +354,8 @@ public class Function
                     status = "healthy",
                     message = "Lambda function is operational",
                     timestamp = DateTime.UtcNow,
-                    source = "health_check"
+                    source = "health_check",
+                    awsRequestId = context.AwsRequestId
                 }, JsonOptions),
                 Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
             };
@@ -350,8 +368,6 @@ public class Function
         using (LogContext.PushProperty("RequestSource", requestSource.ToString()))
         using (LogContext.PushProperty("TraceId", traceId))
         {
-            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Function>>();
-
             return await observabilityService.ExecuteWithObservabilityAsync(
                 "LambdaHandler",
                 requestSource,
@@ -472,42 +488,81 @@ public class Function
         }
     }
 
-    private static RequestSource DetectRequestSource(string inputJson)
+    private static RequestSource DetectRequestSource(string inputJson, ILogger<Function> logger)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(inputJson) || 
-                inputJson.Trim() == "{}" || 
-                inputJson.Trim() == "null")
+            // Check for empty/null
+            if (string.IsNullOrWhiteSpace(inputJson))
             {
+                logger.LogInformation("DETECT: Input is null or whitespace -> CicdHealthCheck");
+                return RequestSource.CicdHealthCheck;
+            }
+
+            var trimmed = inputJson.Trim();
+            if (trimmed == "{}" || trimmed == "null")
+            {
+                logger.LogInformation("DETECT: Input is empty object or null -> CicdHealthCheck");
                 return RequestSource.CicdHealthCheck;
             }
 
             var doc = JsonDocument.Parse(inputJson);
             var root = doc.RootElement;
 
+            // Log all top-level properties for debugging
+            var properties = new List<string>();
+            foreach (var prop in root.EnumerateObject())
+            {
+                properties.Add(prop.Name);
+            }
+            logger.LogInformation("DETECT: JSON Properties=[{Properties}]", string.Join(", ", properties));
+
+            // Check for EventBridge
             if (root.TryGetProperty("source", out var source))
             {
                 var sourceStr = source.GetString()?.ToLowerInvariant() ?? "";
-                if (sourceStr.StartsWith("aws.") || 
-                    sourceStr.Contains("eventbridge") ||
-                    root.TryGetProperty("detail-type", out _))
+                logger.LogInformation("DETECT: Found 'source' property='{Source}'", sourceStr);
+                
+                if (sourceStr.StartsWith("aws.") || sourceStr.Contains("eventbridge"))
                 {
+                    logger.LogInformation("DETECT: Source starts with 'aws.' or contains 'eventbridge' -> EventBridge");
+                    return RequestSource.EventBridge;
+                }
+                
+                if (root.TryGetProperty("detail-type", out var detailType))
+                {
+                    logger.LogInformation("DETECT: Found 'detail-type' property='{DetailType}' -> EventBridge", 
+                        detailType.GetString());
                     return RequestSource.EventBridge;
                 }
             }
 
-            if (root.TryGetProperty("requestContext", out var requestContext) &&
-                requestContext.TryGetProperty("requestId", out _) &&
-                requestContext.TryGetProperty("stage", out _))
+            // Check for API Gateway
+            if (root.TryGetProperty("requestContext", out var requestContext))
             {
-                return RequestSource.ApiGateway;
+                logger.LogInformation("DETECT: Found 'requestContext' property");
+                
+                var hasRequestId = requestContext.TryGetProperty("requestId", out var reqId);
+                var hasStage = requestContext.TryGetProperty("stage", out var stage);
+                
+                logger.LogInformation("DETECT: requestContext.requestId={HasRequestId}({RequestId}), requestContext.stage={HasStage}({Stage})",
+                    hasRequestId, hasRequestId ? reqId.GetString() : "null",
+                    hasStage, hasStage ? stage.GetString() : "null");
+                
+                if (hasRequestId && hasStage)
+                {
+                    logger.LogInformation("DETECT: Has both requestId and stage -> ApiGateway");
+                    return RequestSource.ApiGateway;
+                }
             }
 
+            // Default to direct Lambda invocation
+            logger.LogInformation("DETECT: No specific markers found -> Lambda (direct invocation)");
             return RequestSource.Lambda;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "DETECT: Exception during detection -> Lambda (default)");
             return RequestSource.Lambda;
         }
     }
