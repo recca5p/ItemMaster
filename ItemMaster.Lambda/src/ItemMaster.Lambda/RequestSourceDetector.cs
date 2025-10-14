@@ -28,16 +28,10 @@ public class RequestSourceDetector : IRequestSourceDetector
             }
 
             // Check for empty/null (Health Check)
-            if (string.IsNullOrWhiteSpace(inputJson))
-            {
-                return RequestSource.CicdHealthCheck;
-            }
+            if (string.IsNullOrWhiteSpace(inputJson)) return RequestSource.CicdHealthCheck;
 
             var trimmed = inputJson.Trim();
-            if (trimmed == "{}" || trimmed == "null")
-            {
-                return RequestSource.CicdHealthCheck;
-            }
+            if (trimmed == "{}" || trimmed == "null") return RequestSource.CicdHealthCheck;
 
             var doc = JsonDocument.Parse(inputJson);
             var root = doc.RootElement;
@@ -46,15 +40,9 @@ public class RequestSourceDetector : IRequestSourceDetector
             if (root.TryGetProperty("source", out var source))
             {
                 var sourceStr = source.GetString()?.ToLowerInvariant() ?? "";
-                if (sourceStr.StartsWith("aws.") || sourceStr.Contains("eventbridge"))
-                {
-                    return RequestSource.EventBridge;
-                }
-                
-                if (root.TryGetProperty("detail-type", out _))
-                {
-                    return RequestSource.EventBridge;
-                }
+                if (sourceStr.StartsWith("aws.") || sourceStr.Contains("eventbridge")) return RequestSource.EventBridge;
+
+                if (root.TryGetProperty("detail-type", out _)) return RequestSource.EventBridge;
             }
 
             // Check for API Gateway
@@ -62,11 +50,8 @@ public class RequestSourceDetector : IRequestSourceDetector
             {
                 var hasRequestId = requestContext.TryGetProperty("requestId", out _);
                 var hasStage = requestContext.TryGetProperty("stage", out _);
-                
-                if (hasRequestId && hasStage)
-                {
-                    return RequestSource.ApiGateway;
-                }
+
+                if (hasRequestId && hasStage) return RequestSource.ApiGateway;
             }
 
             return RequestSource.Lambda;

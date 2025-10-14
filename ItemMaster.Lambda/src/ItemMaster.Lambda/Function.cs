@@ -65,6 +65,8 @@ public class Function
             services.AddScoped<ITracingService, InMemoryTracingService>();
             services.AddScoped<IObservabilityService, ObservabilityService>();
             services.AddSingleton<IRequestSourceDetector, RequestSourceDetector>();
+            services.AddScoped<IUnifiedItemMapper, UnifiedItemMapper>();
+            services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
             ServiceProvider = services.BuildServiceProvider();
             return;
         }
@@ -247,6 +249,7 @@ public class Function
             servicesFull.AddScoped<ITracingService, XRayTracingService>();
             servicesFull.AddScoped<IObservabilityService, ObservabilityService>();
             servicesFull.AddSingleton<IRequestSourceDetector, RequestSourceDetector>();
+            servicesFull.AddScoped<IUnifiedItemMapper, UnifiedItemMapper>();
         }
 
         if (!_startupError) servicesFull.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
@@ -315,7 +318,7 @@ public class Function
 
         using var scope = ServiceProvider.CreateScope();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Function>>();
-        
+
         var requestSourceDetector = scope.ServiceProvider.GetRequiredService<IRequestSourceDetector>();
         var requestSource = requestSourceDetector.DetectSource(input);
 
@@ -324,8 +327,8 @@ public class Function
             var response = new APIGatewayProxyResponse
             {
                 StatusCode = 200,
-                Body = JsonSerializer.Serialize(new 
-                { 
+                Body = JsonSerializer.Serialize(new
+                {
                     status = "healthy",
                     message = "Lambda function is operational",
                     timestamp = DateTime.UtcNow,
@@ -355,25 +358,17 @@ public class Function
 
                     ProcessSkusRequest? processRequest = null;
                     string inputJson;
-                    
+
                     try
                     {
                         if (input is string str)
-                        {
                             inputJson = str;
-                        }
                         else if (input is JsonDocument jsonDoc)
-                        {
                             inputJson = jsonDoc.RootElement.GetRawText();
-                        }
                         else if (input is JsonElement jsonElem)
-                        {
                             inputJson = jsonElem.GetRawText();
-                        }
                         else
-                        {
                             inputJson = JsonSerializer.Serialize(input, JsonOptions);
-                        }
                     }
                     catch
                     {
@@ -381,32 +376,27 @@ public class Function
                     }
 
                     if (requestSource == RequestSource.EventBridge)
-                    {
                         try
                         {
                             var eventDoc = JsonDocument.Parse(inputJson);
                             if (eventDoc.RootElement.TryGetProperty("detail", out var detail))
-                            {
                                 processRequest = JsonSerializer.Deserialize<ProcessSkusRequest>(
                                     detail.GetRawText(), JsonOptions);
-                            }
                         }
                         catch (Exception ex)
                         {
                             logger.LogWarning(ex, "Failed to parse EventBridge detail, using default request");
                         }
-                    }
                     else if (requestSource == RequestSource.ApiGateway)
-                    {
                         try
                         {
-                            var apiGwRequest = JsonSerializer.Deserialize<APIGatewayProxyRequest>(inputJson, JsonOptions);
+                            var apiGwRequest =
+                                JsonSerializer.Deserialize<APIGatewayProxyRequest>(inputJson, JsonOptions);
                             var bodyRaw = apiGwRequest?.Body;
-                            
+
                             if (!string.IsNullOrWhiteSpace(bodyRaw))
                             {
                                 if (apiGwRequest?.IsBase64Encoded == true)
-                                {
                                     try
                                     {
                                         var bytes = Convert.FromBase64String(bodyRaw);
@@ -418,12 +408,13 @@ public class Function
                                         return new APIGatewayProxyResponse
                                         {
                                             StatusCode = 400,
-                                            Body = JsonSerializer.Serialize(new { error = "base64_decode_failure", traceId },
+                                            Body = JsonSerializer.Serialize(
+                                                new { error = "base64_decode_failure", traceId },
                                                 JsonOptions),
-                                            Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
+                                            Headers = new Dictionary<string, string>
+                                                { { "Content-Type", "application/json" } }
                                         };
                                     }
-                                }
 
                                 processRequest = JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, JsonOptions);
                             }
@@ -432,9 +423,7 @@ public class Function
                         {
                             logger.LogError(ex, "ApiGatewayRequestParseFailure | TraceId: {TraceId}", traceId);
                         }
-                    }
                     else
-                    {
                         try
                         {
                             processRequest = JsonSerializer.Deserialize<ProcessSkusRequest>(inputJson, JsonOptions);
@@ -443,7 +432,6 @@ public class Function
                         {
                             logger.LogWarning(ex, "DirectInvocationParseFailure | TraceId: {TraceId}", traceId);
                         }
-                    }
 
                     processRequest ??= new ProcessSkusRequest();
 

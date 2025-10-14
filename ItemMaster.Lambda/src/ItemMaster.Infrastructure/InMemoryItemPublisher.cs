@@ -15,25 +15,14 @@ public class InMemoryItemPublisher : IItemPublisher
         _logger = logger;
     }
 
-    public Task<Result> PublishItemsAsync(IEnumerable<Item> items, string? traceId = null,
-        CancellationToken cancellationToken = default)
-    {
-        var itemList = items.ToList();
-        _publishedItems.AddRange(itemList);
 
-        _logger.LogInformation("Published {ItemCount} items to in-memory store (test mode) | TraceId: {TraceId}",
-            itemList.Count, traceId);
-
-        return Task.FromResult(Result.Success());
-    }
-
-    public Task<Result> PublishSimplifiedItemsAsync(IEnumerable<ItemForSqs> items, string? traceId = null,
+    public Task<Result> PublishUnifiedItemsAsync(IEnumerable<UnifiedItemMaster> items, string? traceId = null,
         CancellationToken cancellationToken = default)
     {
         var itemList = items.ToList();
 
         _logger.LogInformation(
-            "Published {ItemCount} simplified items to in-memory store (test mode) | TraceId: {TraceId}",
+            "Published {ItemCount} unified items to in-memory store (test mode) | TraceId: {TraceId}",
             itemList.Count, traceId);
 
         return Task.FromResult(Result.Success());

@@ -2,7 +2,6 @@ using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
 using ItemMaster.Contracts;
-using ItemMaster.Domain;
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -33,104 +32,69 @@ public class SqsItemPublisher : IItemPublisher
         _resiliencePipeline = CreateResiliencePipeline();
     }
 
-    public async Task<Result> PublishItemsAsync(IEnumerable<Item> items, string? traceId = null,
+    public async Task<Result> PublishUnifiedItemsAsync(IEnumerable<UnifiedItemMaster> items, string? traceId = null,
         CancellationToken cancellationToken = default)
     {
         var itemList = items.ToList();
-        _logger.LogInformation("Starting to publish {ItemCount} items to SQS", itemList.Count);
+        _logger.LogInformation("Starting to publish {ItemCount} unified items to SQS | TraceId: {TraceId}",
+            itemList.Count, traceId);
+
+        var sampleItems = itemList.Take(3).ToList();
+        foreach (var sampleItem in sampleItems)
+        {
+            var serializedItem = JsonSerializer.Serialize(sampleItem, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            _logger.LogInformation(
+                "UNIFIED_MODEL_SAMPLE | SKU: {Sku} | TraceId: {TraceId}\n{UnifiedModel}",
+                sampleItem.Sku, traceId, serializedItem);
+        }
 
         try
         {
-            var batches = CreateBatchesFromItems(itemList);
+            var batches = CreateBatchesFromUnifiedItems(itemList);
             var publishResults = new List<BatchPublishResult>();
+
+            // Log that we're publishing one message per item
+            _logger.LogInformation(
+                "Publishing {TotalItems} items as individual messages in {BatchCount} batches (max 10 messages per batch) | TraceId: {TraceId}",
+                itemList.Count, batches.Count, traceId);
 
             foreach (var batch in batches)
             {
                 var result = await PublishBatchWithCircuitBreaker(batch, cancellationToken);
                 publishResults.Add(result);
 
-                await LogBatchResults(result, "PublishItems", traceId, cancellationToken);
-            }
-
-            var totalSuccessful = publishResults.Sum(r => r.SuccessfulMessages.Count);
-            var totalFailed = publishResults.Sum(r => r.FailedMessages.Count);
-
-            _logger.LogInformation("SQS publishing completed: {SuccessCount} successful, {FailedCount} failed",
-                totalSuccessful, totalFailed);
-
-            // Log overall result to MySQL
-            await _logRepository.LogProcessingResultAsync(
-                "SQS_PUBLISH_ITEMS",
-                totalFailed == 0,
-                RequestSource.Lambda,
-                totalFailed > 0 ? $"Failed to publish {totalFailed} out of {itemList.Count} items" : null,
-                totalSuccessful,
-                traceId,
-                cancellationToken);
-
-            return totalFailed == 0
-                ? Result.Success()
-                : Result.Failure($"Failed to publish {totalFailed} out of {itemList.Count} items to SQS");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error while publishing items to SQS");
-            await _logRepository.LogProcessingResultAsync(
-                "SQS_PUBLISH_ITEMS",
-                false,
-                RequestSource.Lambda,
-                ex.Message,
-                null,
-                traceId,
-                cancellationToken);
-            return Result.Failure($"SQS publish error: {ex.Message}");
-        }
-    }
-
-    public async Task<Result> PublishSimplifiedItemsAsync(IEnumerable<ItemForSqs> items, string? traceId = null,
-        CancellationToken cancellationToken = default)
-    {
-        var itemList = items.ToList();
-        _logger.LogInformation("Starting to publish {ItemCount} simplified items to SQS", itemList.Count);
-
-        try
-        {
-            var batches = CreateBatchesFromSimplifiedItems(itemList);
-            var publishResults = new List<BatchPublishResult>();
-
-            foreach (var batch in batches)
-            {
-                var result = await PublishBatchWithCircuitBreaker(batch, cancellationToken);
-                publishResults.Add(result);
-
-                await LogBatchResults(result, "PublishSimplifiedItems", traceId, cancellationToken);
+                await LogBatchResults(result, "PublishUnifiedItems", traceId, cancellationToken);
             }
 
             var totalSuccessful = publishResults.Sum(r => r.SuccessfulMessages.Count);
             var totalFailed = publishResults.Sum(r => r.FailedMessages.Count);
 
             _logger.LogInformation(
-                "SQS simplified items publishing completed: {SuccessCount} successful, {FailedCount} failed",
-                totalSuccessful, totalFailed);
+                "SQS unified items publishing completed: {SuccessCount} successful, {FailedCount} failed | TraceId: {TraceId}",
+                totalSuccessful, totalFailed, traceId);
 
             await _logRepository.LogProcessingResultAsync(
-                "SQS_PUBLISH_SIMPLIFIED_ITEMS",
+                "SQS_PUBLISH_UNIFIED_ITEMS",
                 totalFailed == 0,
                 RequestSource.Lambda,
-                totalFailed > 0 ? $"Failed to publish {totalFailed} out of {itemList.Count} simplified items" : null,
+                totalFailed > 0 ? $"Failed to publish {totalFailed} out of {itemList.Count} unified items" : null,
                 totalSuccessful,
                 traceId,
                 cancellationToken);
 
             return totalFailed == 0
                 ? Result.Success()
-                : Result.Failure($"Failed to publish {totalFailed} out of {itemList.Count} simplified items to SQS");
+                : Result.Failure($"Failed to publish {totalFailed} out of {itemList.Count} unified items to SQS");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error while publishing simplified items to SQS");
+            _logger.LogError(ex, "Unexpected error while publishing unified items to SQS | TraceId: {TraceId}",
+                traceId);
             await _logRepository.LogProcessingResultAsync(
-                "SQS_PUBLISH_SIMPLIFIED_ITEMS",
+                "SQS_PUBLISH_UNIFIED_ITEMS",
                 false,
                 RequestSource.Lambda,
                 ex.Message,
@@ -327,7 +291,8 @@ public class SqsItemPublisher : IItemPublisher
                 cancellationToken);
     }
 
-    private List<List<SendMessageBatchRequestEntry>> CreateBatchesFromItems(List<Item> items)
+
+    private List<List<SendMessageBatchRequestEntry>> CreateBatchesFromUnifiedItems(List<UnifiedItemMaster> items)
     {
         var batches = new List<List<SendMessageBatchRequestEntry>>();
         const int batchSize = 10;
@@ -338,34 +303,20 @@ public class SqsItemPublisher : IItemPublisher
             var itemsBatch = items.Skip(i).Take(batchSize);
 
             foreach (var item in itemsBatch)
+            {
+                var messageId = Guid.NewGuid().ToString();
+                var messageBody = JsonSerializer.Serialize(item);
+
+                _logger.LogDebug(
+                    "Creating individual SQS message | MessageId: {MessageId} | SKU: {Sku} | Size: {Size} bytes",
+                    messageId, item.Sku, messageBody.Length);
+
                 batch.Add(new SendMessageBatchRequestEntry
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    MessageBody = JsonSerializer.Serialize(item)
+                    Id = messageId,
+                    MessageBody = messageBody // Single item as JSON, not an array
                 });
-
-            batches.Add(batch);
-        }
-
-        return batches;
-    }
-
-    private List<List<SendMessageBatchRequestEntry>> CreateBatchesFromSimplifiedItems(List<ItemForSqs> items)
-    {
-        var batches = new List<List<SendMessageBatchRequestEntry>>();
-        const int batchSize = 10;
-
-        for (var i = 0; i < items.Count; i += batchSize)
-        {
-            var batch = new List<SendMessageBatchRequestEntry>();
-            var itemsBatch = items.Skip(i).Take(batchSize);
-
-            foreach (var item in itemsBatch)
-                batch.Add(new SendMessageBatchRequestEntry
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    MessageBody = JsonSerializer.Serialize(item)
-                });
+            }
 
             batches.Add(batch);
         }

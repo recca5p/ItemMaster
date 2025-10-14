@@ -13,6 +13,7 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
     private readonly IItemMasterLogRepository _logRepository;
     private readonly IObservabilityService _observabilityService;
     private readonly ISnowflakeRepository _snowflakeRepository;
+    private readonly IUnifiedItemMapper _unifiedItemMapper;
     private string? _currentTraceId;
 
     public ProcessSkusUseCase(
@@ -20,13 +21,15 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
         IItemPublisher itemPublisher,
         IItemMasterLogRepository logRepository,
         ILogger<ProcessSkusUseCase> logger,
-        IObservabilityService observabilityService)
+        IObservabilityService observabilityService,
+        IUnifiedItemMapper unifiedItemMapper)
     {
         _snowflakeRepository = snowflakeRepository;
         _itemPublisher = itemPublisher;
         _logRepository = logRepository;
         _logger = logger;
         _observabilityService = observabilityService;
+        _unifiedItemMapper = unifiedItemMapper;
     }
 
     public async Task<Result<ProcessSkusResponse>> ExecuteAsync(ProcessSkusRequest request,
@@ -133,16 +136,69 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                         },
                         cancellationToken: cancellationToken);
 
-                var simplifiedItems = itemsList.Select(item => new ItemForSqs
+                var foundSkus = itemsList.Select(i => i.Sku).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var notFoundSkus = requestedSkus.Any()
+                    ? requestedSkus.Where(sku => !foundSkus.Contains(sku)).ToList()
+                    : new List<string>();
+
+                if (notFoundSkus.Any())
                 {
-                    Sku = item.Sku,
-                    Brand = item.Brand,
-                    Status = item.Status,
-                    Region = item.Region,
-                    Barcode = item.Barcode,
-                    ProductTitle = item.ProductTitle,
-                    Price = item.Price
-                }).ToList();
+                    var notFoundMessage = $"SKUs not found in Snowflake: {string.Join(", ", notFoundSkus)}";
+                    _logger.LogWarning("{Message} | Count: {Count} | TraceId: {TraceId}",
+                        notFoundMessage, notFoundSkus.Count, _currentTraceId);
+
+                    await LogResultSafely("skus_not_found", true, requestSource, notFoundMessage, notFoundSkus.Count);
+                }
+
+                var unifiedItems = new List<UnifiedItemMaster>();
+                var skippedItems = new List<SkippedItemDetail>();
+                var successfulSkus = new List<string>();
+
+                foreach (var item in itemsList)
+                {
+                    var mappingResult = _unifiedItemMapper.MapToUnifiedModel(item);
+                    if (mappingResult.IsSuccess && mappingResult.UnifiedItem != null)
+                    {
+                        unifiedItems.Add(mappingResult.UnifiedItem);
+                        successfulSkus.Add(mappingResult.Sku);
+                    }
+                    else
+                    {
+                        var skippedItem = new SkippedItemDetail
+                        {
+                            Sku = mappingResult.Sku,
+                            Reason = "Validation failed",
+                            ValidationFailure = mappingResult.FailureReason ?? "Unknown validation error"
+                        };
+                        skippedItems.Add(skippedItem);
+
+                        _logger.LogWarning(
+                            "SKU_SKIPPED | SKU: {Sku} | Reason: {Reason} | TraceId: {TraceId}",
+                            skippedItem.Sku, skippedItem.ValidationFailure, _currentTraceId);
+
+                        await LogResultSafely("sku_mapping_failed", true, requestSource,
+                            $"SKU: {skippedItem.Sku} | Reason: {skippedItem.ValidationFailure}", 1);
+                    }
+                }
+
+                if (skippedItems.Any())
+                {
+                    _logger.LogWarning(
+                        "MAPPING_SUMMARY | Total Skipped: {SkippedCount} | Reasons: {Reasons} | TraceId: {TraceId}",
+                        skippedItems.Count,
+                        string.Join("; ", skippedItems.Select(s => $"{s.Sku}={s.ValidationFailure}").Take(10)),
+                        _currentTraceId);
+
+                    await _observabilityService.RecordMetricAsync("ItemsSkippedValidation", skippedItems.Count,
+                        new Dictionary<string, string>
+                        {
+                            ["requestSource"] = requestSource.ToString()
+                        });
+                }
+
+                _logger.LogInformation(
+                    "PROCESSING_COMPLETE | Found: {Found} | NotFound: {NotFound} | Mapped: {Mapped} | Skipped: {Skipped} | TraceId: {TraceId}",
+                    itemsList.Count, notFoundSkus.Count, unifiedItems.Count, skippedItems.Count, _currentTraceId);
 
                 await _observabilityService.ExecuteWithObservabilityAsync(
                     "PublishToSqs",
@@ -150,7 +206,7 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                     async () =>
                     {
                         var publishResult =
-                            await _itemPublisher.PublishSimplifiedItemsAsync(simplifiedItems.AsEnumerable(),
+                            await _itemPublisher.PublishUnifiedItemsAsync(unifiedItems,
                                 _currentTraceId, cancellationToken);
 
                         if (!publishResult.IsSuccess)
@@ -159,14 +215,13 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                             _logger.LogError("SQS Publish failed: {Error} | TraceId: {TraceId}", errorMsg,
                                 _currentTraceId);
                             await LogResultSafely("publish_to_sqs", false, requestSource, errorMsg,
-                                simplifiedItems.Count);
+                                unifiedItems.Count);
                             throw new InvalidOperationException(errorMsg);
                         }
 
-                        await LogResultSafely("publish_to_sqs", true, requestSource, null, simplifiedItems.Count);
+                        await LogResultSafely("publish_to_sqs", true, requestSource, null, unifiedItems.Count);
 
-                        // Record successful publish metrics
-                        await _observabilityService.RecordMetricAsync("ItemsPublishedToSqs", simplifiedItems.Count,
+                        await _observabilityService.RecordMetricAsync("ItemsPublishedToSqs", unifiedItems.Count,
                             new Dictionary<string, string>
                             {
                                 ["requestSource"] = requestSource.ToString()
@@ -176,8 +231,10 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                     },
                     new Dictionary<string, object>
                     {
-                        ["itemCount"] = simplifiedItems.Count,
-                        ["brands"] = simplifiedItems.Select(i => i.Brand).Distinct().Take(5).ToList()
+                        ["itemCount"] = unifiedItems.Count,
+                        ["brands"] = unifiedItems
+                            .SelectMany(i => i.Attributes.Where(a => a.Id == "brand_entity").Select(a => a.Value))
+                            .Distinct().Take(5).ToList()
                     },
                     cancellationToken);
 
@@ -185,13 +242,17 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                 {
                     Success = true,
                     ItemsProcessed = itemsList.Count,
-                    ItemsPublished = simplifiedItems.Count,
-                    Failed = 0
+                    ItemsPublished = unifiedItems.Count,
+                    Failed = skippedItems.Count,
+                    SkusNotFound = notFoundSkus,
+                    SkippedItems = skippedItems,
+                    SuccessfulSkus = successfulSkus
                 };
 
                 _logger.LogInformation(
-                    "ProcessSkus completed successfully | Processed: {Processed} | Published: {Published} | TraceId: {TraceId}",
-                    response.ItemsProcessed, response.ItemsPublished, _currentTraceId);
+                    "ProcessSkus completed successfully | Processed: {Processed} | Published: {Published} | Failed: {Failed} | NotFound: {NotFound} | TraceId: {TraceId}",
+                    response.ItemsProcessed, response.ItemsPublished, response.Failed, notFoundSkus.Count,
+                    _currentTraceId);
 
                 return Result<ProcessSkusResponse>.Success(response);
             },
