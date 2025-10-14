@@ -1,4 +1,4 @@
-using Amazon.Lambda.APIGatewayEvents;
+using System.Text.Json;
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 
@@ -13,61 +13,68 @@ public class RequestSourceDetector : IRequestSourceDetector
         _logger = logger;
     }
 
-    public RequestSource DetectSource(APIGatewayProxyRequest request)
+    public RequestSource DetectSource(object input)
     {
-        if (IsHealthCheckRequest(request))
+        try
         {
-            _logger.LogDebug("Detected health check request");
-            return RequestSource.CicdHealthCheck;
-        }
+            string inputJson;
+            try
+            {
+                inputJson = input is string str ? str : JsonSerializer.Serialize(input);
+            }
+            catch
+            {
+                inputJson = "{}";
+            }
 
-        if (IsEventBridgeRequest(request))
+            // Check for empty/null (Health Check)
+            if (string.IsNullOrWhiteSpace(inputJson))
+            {
+                return RequestSource.CicdHealthCheck;
+            }
+
+            var trimmed = inputJson.Trim();
+            if (trimmed == "{}" || trimmed == "null")
+            {
+                return RequestSource.CicdHealthCheck;
+            }
+
+            var doc = JsonDocument.Parse(inputJson);
+            var root = doc.RootElement;
+
+            // Check for EventBridge
+            if (root.TryGetProperty("source", out var source))
+            {
+                var sourceStr = source.GetString()?.ToLowerInvariant() ?? "";
+                if (sourceStr.StartsWith("aws.") || sourceStr.Contains("eventbridge"))
+                {
+                    return RequestSource.EventBridge;
+                }
+                
+                if (root.TryGetProperty("detail-type", out _))
+                {
+                    return RequestSource.EventBridge;
+                }
+            }
+
+            // Check for API Gateway
+            if (root.TryGetProperty("requestContext", out var requestContext))
+            {
+                var hasRequestId = requestContext.TryGetProperty("requestId", out _);
+                var hasStage = requestContext.TryGetProperty("stage", out _);
+                
+                if (hasRequestId && hasStage)
+                {
+                    return RequestSource.ApiGateway;
+                }
+            }
+
+            return RequestSource.Lambda;
+        }
+        catch (Exception ex)
         {
-            _logger.LogDebug("Detected EventBridge request");
-            return RequestSource.EventBridge;
+            _logger.LogWarning(ex, "Exception during request source detection, defaulting to Lambda");
+            return RequestSource.Lambda;
         }
-
-        if (IsApiGatewayRequest(request))
-        {
-            _logger.LogDebug("Detected API Gateway request");
-            return RequestSource.ApiGateway;
-        }
-
-        _logger.LogDebug("Request source unknown");
-        return RequestSource.Unknown;
-    }
-
-    private static bool IsHealthCheckRequest(APIGatewayProxyRequest request)
-    {
-        var userAgent = request.Headers?.TryGetValue("User-Agent", out var ua) == true ? ua?.ToLowerInvariant() : null;
-
-        if (userAgent != null && (
-                userAgent.Contains("github-actions") ||
-                userAgent.Contains("curl") ||
-                userAgent.Contains("wget") ||
-                userAgent.Contains("healthcheck") ||
-                userAgent.Contains("monitoring")))
-            return true;
-        return false;
-    }
-
-    private static bool IsEventBridgeRequest(APIGatewayProxyRequest request)
-    {
-        var headers = request.Headers ?? new Dictionary<string, string>();
-
-        if (headers.ContainsKey("X-Amz-Source") ||
-            headers.ContainsKey("X-EventBridge-Source"))
-            return true;
-
-        var requestContext = request.RequestContext;
-        if (requestContext?.Identity?.UserAgent?.Contains("EventBridge") == true) return true;
-
-        return false;
-    }
-
-    private static bool IsApiGatewayRequest(APIGatewayProxyRequest request)
-    {
-        return request.RequestContext != null &&
-               !string.IsNullOrWhiteSpace(request.RequestContext.RequestId);
     }
 }
