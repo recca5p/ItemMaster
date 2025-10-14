@@ -358,7 +358,22 @@ public class Function
                     
                     try
                     {
-                        inputJson = input is string str ? str : JsonSerializer.Serialize(input, JsonOptions);
+                        if (input is string str)
+                        {
+                            inputJson = str;
+                        }
+                        else if (input is JsonDocument jsonDoc)
+                        {
+                            inputJson = jsonDoc.RootElement.GetRawText();
+                        }
+                        else if (input is JsonElement jsonElem)
+                        {
+                            inputJson = jsonElem.GetRawText();
+                        }
+                        else
+                        {
+                            inputJson = JsonSerializer.Serialize(input, JsonOptions);
+                        }
                     }
                     catch
                     {
