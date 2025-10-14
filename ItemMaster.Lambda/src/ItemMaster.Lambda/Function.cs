@@ -321,7 +321,7 @@ public class Function
 
         if (requestSource == RequestSource.CicdHealthCheck)
         {
-            return new APIGatewayProxyResponse
+            var response = new APIGatewayProxyResponse
             {
                 StatusCode = 200,
                 Body = JsonSerializer.Serialize(new 
@@ -333,6 +333,9 @@ public class Function
                 }, JsonOptions),
                 Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
             };
+
+            logger.LogInformation("Health check: {response}", response.Body);
+            return response;
         }
 
         var observabilityService = scope.ServiceProvider.GetRequiredService<IObservabilityService>();
@@ -361,7 +364,7 @@ public class Function
                     {
                         inputJson = "{}";
                     }
-                    
+
                     if (requestSource == RequestSource.EventBridge)
                     {
                         try
