@@ -1,0 +1,192 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Shared/ItemMaster.Shared.csproj": {}
+  },
+  "projects": {
+    "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Contracts/ItemMaster.Contracts.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Contracts/ItemMaster.Contracts.csproj",
+        "projectName": "ItemMaster.Contracts",
+        "projectPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Contracts/ItemMaster.Contracts.csproj",
+        "packagesPath": "/Users/macbook/.nuget/packages/",
+        "outputPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Contracts/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/macbook/Phat/ItemMaster/NuGet.Config",
+          "/Users/macbook/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/macbook/.dotnet/sdk/8.0.414/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Domain/ItemMaster.Domain.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Domain/ItemMaster.Domain.csproj",
+        "projectName": "ItemMaster.Domain",
+        "projectPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Domain/ItemMaster.Domain.csproj",
+        "packagesPath": "/Users/macbook/.nuget/packages/",
+        "outputPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Domain/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/macbook/Phat/ItemMaster/NuGet.Config",
+          "/Users/macbook/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/macbook/.dotnet/sdk/8.0.414/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Shared/ItemMaster.Shared.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Shared/ItemMaster.Shared.csproj",
+        "projectName": "ItemMaster.Shared",
+        "projectPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Shared/ItemMaster.Shared.csproj",
+        "packagesPath": "/Users/macbook/.nuget/packages/",
+        "outputPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Shared/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/macbook/Phat/ItemMaster/NuGet.Config",
+          "/Users/macbook/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Contracts/ItemMaster.Contracts.csproj": {
+                "projectPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Contracts/ItemMaster.Contracts.csproj"
+              },
+              "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Domain/ItemMaster.Domain.csproj": {
+                "projectPath": "/Users/macbook/Phat/ItemMaster/ItemMaster.Lambda/src/ItemMaster.Domain/ItemMaster.Domain.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/macbook/.dotnet/sdk/8.0.414/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

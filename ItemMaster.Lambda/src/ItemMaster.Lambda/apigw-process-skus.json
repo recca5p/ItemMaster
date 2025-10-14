@@ -1,0 +1,30 @@
+{
+  "resource": "process-skus",
+  "path": "process-skus",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {
+    "Content-Type": [
+      "application/json"
+    ]
+  },
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "process-skus",
+    "httpMethod": "POST",
+    "path": "process-skus",
+    "requestId": "local-test-request-id",
+    "identity": {
+      "sourceIp": "127.0.0.1"
+    },
+    "stage": "dev"
+  },
+  "body": "{\"skus\":[\"V8506320/12/WHITE\",\"PNPEQ3251027-1/L/BROWNSEQUIN\",\"PI6130PP/M/BLACK\"]}",
+  "isBase64Encoded": false
+}
+

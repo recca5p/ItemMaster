@@ -1,0 +1,53 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "ItemMaster.Shared/1.0.0": {
+        "dependencies": {
+          "ItemMaster.Contracts": "1.0.0",
+          "ItemMaster.Domain": "1.0.0"
+        },
+        "runtime": {
+          "ItemMaster.Shared.dll": {}
+        }
+      },
+      "ItemMaster.Contracts/1.0.0": {
+        "runtime": {
+          "ItemMaster.Contracts.dll": {
+            "assemblyVersion": "1.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "ItemMaster.Domain/1.0.0": {
+        "runtime": {
+          "ItemMaster.Domain.dll": {
+            "assemblyVersion": "1.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "ItemMaster.Shared/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ItemMaster.Contracts/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ItemMaster.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

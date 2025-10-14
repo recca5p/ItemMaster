@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ItemMaster.Contracts\ItemMaster.Contracts.csproj"/>
+        <ProjectReference Include="..\ItemMaster.Domain\ItemMaster.Domain.csproj"/>
+        <ProjectReference Include="..\ItemMaster.Infrastructure\ItemMaster.Infrastructure.csproj"/>
+        <ProjectReference Include="..\ItemMaster.Shared\ItemMaster.Shared.csproj"/>
+    </ItemGroup>
+
+</Project>

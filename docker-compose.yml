@@ -1,0 +1,72 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: itemmaster-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: item_master
+      MYSQL_USER: im_user
+      MYSQL_PASSWORD: im_pass
+    ports:
+      - "3306:3306"
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -prootpass || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mock-snowflake:
+    image: postgres:15
+    container_name: itemmaster-mock-snowflake
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: snowflake
+      POSTGRES_USER: snow_user
+      POSTGRES_PASSWORD: snow_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./mock-snowflake-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U snow_user -d snowflake" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:2.3
+    container_name: itemmaster-localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: sqs,logs
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: "1"
+      LS_LOG: warning
+    ports:
+      - "4566:4566"
+      - "4571:4571"
+    volumes:
+      - "./.localstack:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: [ "CMD-SHELL", "awslocal sqs list-queues || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+
+  localstack-init:
+    image: amazon/aws-cli:2.15.30
+    container_name: itemmaster-localstack-init
+    depends_on:
+      - localstack
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: /bin/sh
+    command: -c "set -e; echo 'Waiting for LocalStack...'; until curl -s http://localstack:4566/health | grep 'sqs' >/dev/null; do sleep 3; done; echo 'Creating SQS queue itemmaster-queue'; aws --endpoint-url=http://localstack:4566 sqs create-queue --queue-name itemmaster-queue; echo 'Listing queues'; aws --endpoint-url=http://localstack:4566 sqs list-queues; sleep 2;"

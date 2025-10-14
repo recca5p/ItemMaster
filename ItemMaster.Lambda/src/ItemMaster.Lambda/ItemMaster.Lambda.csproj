@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+        <AWSProjectType>Lambda</AWSProjectType>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <PublishReadyToRun>true</PublishReadyToRun>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Amazon.Lambda.Core" Version="2.2.0"/>
+        <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.1"/>
+        <PackageReference Include="Amazon.Lambda.APIGatewayEvents" Version="2.7.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0"/>
+        <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" Version="6.0.1"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0"/>
+        <PackageReference Include="Serilog" Version="3.1.1"/>
+        <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0"/>
+        <PackageReference Include="Serilog.Formatting.Compact" Version="2.0.0"/>
+        <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1"/>
+        <PackageReference Include="AWSSDK.CloudWatch" Version="3.7.300"/>
+        <PackageReference Include="AWSXRayRecorder.Core" Version="2.14.0"/>
+        <PackageReference Include="AWSXRayRecorder.Handlers.AwsSdk" Version="2.11.0"/>
+        <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="8.0.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ItemMaster.Application\ItemMaster.Application.csproj"/>
+        <ProjectReference Include="..\ItemMaster.Contracts\ItemMaster.Contracts.csproj"/>
+        <ProjectReference Include="..\ItemMaster.Domain\ItemMaster.Domain.csproj"/>
+        <ProjectReference Include="..\ItemMaster.Infrastructure\ItemMaster.Infrastructure.csproj"/>
+        <ProjectReference Include="..\ItemMaster.Shared\ItemMaster.Shared.csproj"/>
+    </ItemGroup>
+
+</Project>
