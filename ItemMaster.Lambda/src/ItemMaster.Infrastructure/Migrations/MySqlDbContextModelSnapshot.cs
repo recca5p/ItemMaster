@@ -19,40 +19,43 @@ namespace ItemMaster.Infrastructure.Migrations
                 .HasAnnotation("ProductVersion", "8.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
-            modelBuilder.Entity("ItemMaster.Shared.ItemLogRecord", b =>
+            modelBuilder.Entity("ItemMaster.Shared.ItemMasterSourceLog", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1000)
-                        .HasColumnType("varchar(1000)");
+                    b.Property<string>("CommonModel")
+                        .HasColumnType("json");
 
-                    b.Property<int?>("ItemCount")
-                        .HasColumnType("int");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
 
-                    b.Property<string>("Operation")
+                    b.Property<string>("Errors")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsSentToSqs")
+                        .HasColumnType("bit(1)");
+
+                    b.Property<string>("Sku")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
-                    b.Property<int>("RequestSource")
-                        .HasColumnType("int");
+                    b.Property<string>("SourceModel")
+                        .HasColumnType("json");
 
-                    b.Property<bool>("Success")
-                        .HasColumnType("bit(1)");
-
-                    b.Property<DateTime>("Timestamp")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("TraceId")
+                    b.Property<string>("ValidationStatus")
+                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
                     b.HasKey("Id");
 
-                    b.ToTable("item_master_logs", (string)null);
+                    b.HasIndex("Sku")
+                        .HasDatabaseName("IX_ItemMasterSourceLog_Sku");
+
+                    b.ToTable("item_master_source_log", (string)null);
                 });
 #pragma warning restore 612, 618
         }

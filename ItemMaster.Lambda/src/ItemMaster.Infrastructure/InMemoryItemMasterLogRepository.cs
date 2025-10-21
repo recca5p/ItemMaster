@@ -7,7 +7,7 @@ public class InMemoryItemMasterLogRepository : IItemMasterLogRepository
 {
     private readonly IClock _clock;
     private readonly ILogger<InMemoryItemMasterLogRepository> _logger;
-    private readonly List<ItemLogRecord> _logs = new();
+    private readonly List<ItemMasterSourceLog> _sourceLogs = new();
 
     public InMemoryItemMasterLogRepository(
         IClock clock,
@@ -17,44 +17,26 @@ public class InMemoryItemMasterLogRepository : IItemMasterLogRepository
         _logger = logger;
     }
 
-    public Task<Result> LogProcessingResultAsync(string operation, bool success, RequestSource requestSource,
-        string? errorMessage = null, int? itemCount = null, string? traceId = null,
-        string? sku = null, string? status = null, List<string>? skippedProperties = null,
-        CancellationToken cancellationToken = default)
+    public Task<Result> LogItemSourceAsync(ItemMasterSourceLog log, CancellationToken cancellationToken = default)
     {
-        var logRecord = new ItemLogRecord
-        {
-            Id = _logs.Count + 1,
-            Operation = operation,
-            Success = success,
-            ErrorMessage = errorMessage,
-            ItemCount = itemCount,
-            Timestamp = _clock.UtcNow,
-            RequestSource = requestSource,
-            TraceId = traceId,
-            Sku = sku,
-            Status = status,
-            SkippedProperties = skippedProperties != null && skippedProperties.Any() 
-                ? string.Join(", ", skippedProperties) 
-                : null
-        };
-
-        _logs.Add(logRecord);
+        log.Id = _sourceLogs.Count + 1;
+        log.CreatedAt = _clock.UtcNow;
+        _sourceLogs.Add(log);
 
         _logger.LogInformation(
-            "InMemory: Logged processing result - Operation: {Operation}, Success: {Success}, RequestSource: {RequestSource}, ItemCount: {ItemCount}, TraceId: {TraceId}, Sku: {Sku}, Status: {Status}",
-            operation, success, requestSource, itemCount, traceId, sku, status);
+            "InMemory: Logged item source - Sku: {Sku}, ValidationStatus: {ValidationStatus}, IsSentToSqs: {IsSentToSqs}",
+            log.Sku, log.ValidationStatus, log.IsSentToSqs);
 
         return Task.FromResult(Result.Success());
     }
 
-    public IReadOnlyList<ItemLogRecord> GetLogs()
+    public IReadOnlyList<ItemMasterSourceLog> GetSourceLogs()
     {
-        return _logs.AsReadOnly();
+        return _sourceLogs.AsReadOnly();
     }
 
     public void Clear()
     {
-        _logs.Clear();
+        _sourceLogs.Clear();
     }
 }

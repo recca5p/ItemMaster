@@ -14,7 +14,6 @@ namespace ItemMaster.Infrastructure;
 public class SqsItemPublisher : IItemPublisher
 {
     private readonly ILogger<SqsItemPublisher> _logger;
-    private readonly IItemMasterLogRepository _logRepository;
     private readonly SqsItemPublisherOptions _options;
     private readonly ResiliencePipeline _resiliencePipeline;
     private readonly IAmazonSQS _sqsClient;
@@ -22,13 +21,11 @@ public class SqsItemPublisher : IItemPublisher
     public SqsItemPublisher(
         IAmazonSQS sqsClient,
         IOptions<SqsItemPublisherOptions> options,
-        ILogger<SqsItemPublisher> logger,
-        IItemMasterLogRepository logRepository)
+        ILogger<SqsItemPublisher> logger)
     {
         _sqsClient = sqsClient;
         _options = options.Value;
         _logger = logger;
-        _logRepository = logRepository;
         _resiliencePipeline = CreateResiliencePipeline();
     }
 
@@ -76,18 +73,6 @@ public class SqsItemPublisher : IItemPublisher
                 "SQS unified items publishing completed: {SuccessCount} successful, {FailedCount} failed | TraceId: {TraceId}",
                 totalSuccessful, totalFailed, traceId);
 
-            await _logRepository.LogProcessingResultAsync(
-                "SQS_PUBLISH_UNIFIED_ITEMS",
-                totalFailed == 0,
-                RequestSource.Lambda,
-                totalFailed > 0 ? $"Failed to publish {totalFailed} out of {itemList.Count} unified items" : null,
-                totalSuccessful,
-                traceId,
-                null,
-                null,
-                null,
-                cancellationToken);
-
             return totalFailed == 0
                 ? Result.Success()
                 : Result.Failure($"Failed to publish {totalFailed} out of {itemList.Count} unified items to SQS");
@@ -96,17 +81,6 @@ public class SqsItemPublisher : IItemPublisher
         {
             _logger.LogError(ex, "Unexpected error while publishing unified items to SQS | TraceId: {TraceId}",
                 traceId);
-            await _logRepository.LogProcessingResultAsync(
-                "SQS_PUBLISH_UNIFIED_ITEMS",
-                false,
-                RequestSource.Lambda,
-                ex.Message,
-                null,
-                traceId,
-                null,
-                null,
-                null,
-                cancellationToken);
             return Result.Failure($"SQS publish error: {ex.Message}");
         }
     }
@@ -275,32 +249,7 @@ public class SqsItemPublisher : IItemPublisher
 
             _logger.LogError("Failed to publish message {MessageId} to SQS: {ErrorCode} - {ErrorMessage}",
                 failedMessage.Id, errorDetail?.Code ?? "UNKNOWN", errorMessage);
-
-            await _logRepository.LogProcessingResultAsync(
-                $"SQS_MESSAGE_PUBLISH_{operation.ToUpper()}",
-                false,
-                RequestSource.Lambda,
-                $"MessageId: {failedMessage.Id}, Error: {errorMessage}",
-                0,
-                traceId,
-                null,
-                null,
-                null,
-                cancellationToken);
         }
-
-        if (result.SuccessfulMessages.Any())
-            await _logRepository.LogProcessingResultAsync(
-                $"SQS_MESSAGE_PUBLISH_{operation.ToUpper()}",
-                true,
-                RequestSource.Lambda,
-                null,
-                result.SuccessfulMessages.Count,
-                traceId,
-                null,
-                null,
-                null,
-                cancellationToken);
     }
 
 

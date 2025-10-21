@@ -19,44 +19,27 @@ public sealed class EfItemMasterLogRepository : IItemMasterLogRepository
         _logger = logger;
     }
 
-    public async Task<Result> LogProcessingResultAsync(string operation, bool success, RequestSource requestSource,
-        string? errorMessage = null, int? itemCount = null, string? traceId = null,
-        string? sku = null, string? status = null, List<string>? skippedProperties = null,
-        CancellationToken cancellationToken = default)
+
+    public async Task<Result> LogItemSourceAsync(ItemMasterSourceLog log, CancellationToken cancellationToken = default)
     {
         try
         {
-            var logRecord = new ItemLogRecord
-            {
-                Operation = operation,
-                Success = success,
-                ErrorMessage = errorMessage,
-                ItemCount = itemCount,
-                Timestamp = _clock.UtcNow,
-                RequestSource = requestSource,
-                TraceId = traceId,
-                Sku = sku,
-                Status = status,
-                SkippedProperties = skippedProperties != null && skippedProperties.Any() 
-                    ? string.Join(", ", skippedProperties) 
-                    : null
-            };
-
-            _db.ItemLogs.Add(logRecord);
+            log.CreatedAt = _clock.UtcNow;
+            _db.ItemMasterSourceLogs.Add(log);
             await _db.SaveChangesAsync(cancellationToken);
 
             _logger.LogDebug(
-                "Successfully logged processing result: Operation={Operation}, Success={Success}, RequestSource={RequestSource}, ItemCount={ItemCount}, TraceId={TraceId}, Sku={Sku}, Status={Status}",
-                operation, success, requestSource, itemCount, traceId, sku, status);
+                "Successfully logged item source: Sku={Sku}, ValidationStatus={ValidationStatus}, IsSentToSqs={IsSentToSqs}",
+                log.Sku, log.ValidationStatus, log.IsSentToSqs);
 
             return Result.Success();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Failed to log processing result to MySQL: Operation={Operation}, Success={Success}, RequestSource={RequestSource}, TraceId={TraceId}, Sku={Sku}",
-                operation, success, requestSource, traceId, sku);
-            return Result.Failure($"MySQL logging failed: {ex.Message}");
+                "Failed to log item source to MySQL: Sku={Sku}, ValidationStatus={ValidationStatus}",
+                log.Sku, log.ValidationStatus);
+            return Result.Failure($"MySQL item source logging failed: {ex.Message}");
         }
     }
 }

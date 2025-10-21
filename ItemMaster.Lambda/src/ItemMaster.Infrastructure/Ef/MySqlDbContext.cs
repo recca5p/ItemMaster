@@ -9,25 +9,26 @@ public class MySqlDbContext : DbContext
     {
     }
 
-    public DbSet<ItemLogRecord> ItemLogs { get; set; } = null!;
+    public DbSet<ItemMasterSourceLog> ItemMasterSourceLogs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<ItemLogRecord>(entity =>
+
+        modelBuilder.Entity<ItemMasterSourceLog>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
-            entity.Property(e => e.Operation).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Success).IsRequired();
-            entity.Property(e => e.ErrorMessage).HasMaxLength(1000);
-            entity.Property(e => e.ItemCount);
-            entity.Property(e => e.Timestamp).IsRequired();
-            entity.Property(e => e.RequestSource).IsRequired().HasConversion<int>();
-            entity.Property(e => e.TraceId).HasMaxLength(50);
-            entity.Property(e => e.Sku).HasMaxLength(100);
-            entity.Property(e => e.Status).HasMaxLength(50);
-            entity.Property(e => e.SkippedProperties).HasMaxLength(2000);
-            entity.ToTable("item_master_logs");
+            entity.Property(e => e.Sku).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.SourceModel).HasColumnType("json");
+            entity.Property(e => e.ValidationStatus).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.CommonModel).HasColumnType("json");
+            entity.Property(e => e.Errors).HasColumnType("text");
+            entity.Property(e => e.IsSentToSqs).IsRequired();
+            entity.Property(e => e.CreatedAt).IsRequired();
+            
+            entity.HasIndex(e => e.Sku).HasDatabaseName("IX_ItemMasterSourceLog_Sku");
+            
+            entity.ToTable("item_master_source_log");
         });
 
         base.OnModelCreating(modelBuilder);

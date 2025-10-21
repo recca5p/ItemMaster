@@ -20,30 +20,13 @@ public class MySqlItemMasterLogRepository : IItemMasterLogRepository
         _logger = logger;
     }
 
-    public async Task<Result> LogProcessingResultAsync(string operation, bool success, RequestSource requestSource,
-        string? errorMessage = null, int? itemCount = null, string? traceId = null,
-        string? sku = null, string? status = null, List<string>? skippedProperties = null,
-        CancellationToken cancellationToken = default)
+
+    public async Task<Result> LogItemSourceAsync(ItemMasterSourceLog log, CancellationToken cancellationToken = default)
     {
         try
         {
-            var logRecord = new ItemLogRecord
-            {
-                Operation = operation,
-                Success = success,
-                ErrorMessage = errorMessage,
-                ItemCount = itemCount,
-                Timestamp = _clock.UtcNow,
-                RequestSource = requestSource,
-                TraceId = traceId,
-                Sku = sku,
-                Status = status,
-                SkippedProperties = skippedProperties != null && skippedProperties.Any() 
-                    ? string.Join(", ", skippedProperties) 
-                    : null
-            };
-
-            _context.ItemLogs.Add(logRecord);
+            log.CreatedAt = _clock.UtcNow;
+            _context.ItemMasterSourceLogs.Add(log);
             await _context.SaveChangesAsync(cancellationToken);
 
             return Result.Success();
@@ -51,9 +34,9 @@ public class MySqlItemMasterLogRepository : IItemMasterLogRepository
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Failed to log processing result to MySQL: Operation={Operation}, Success={Success}, RequestSource={RequestSource}, TraceId={TraceId}, Sku={Sku}",
-                operation, success, requestSource, traceId, sku);
-            return Result.Failure($"MySQL logging failed: {ex.Message}");
+                "Failed to log item source to MySQL: Sku={Sku}, ValidationStatus={ValidationStatus}, IsSentToSqs={IsSentToSqs}",
+                log.Sku, log.ValidationStatus, log.IsSentToSqs);
+            return Result.Failure($"MySQL item source logging failed: {ex.Message}");
         }
     }
 }

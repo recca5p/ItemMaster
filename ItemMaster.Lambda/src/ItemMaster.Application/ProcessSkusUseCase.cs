@@ -83,8 +83,6 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                                 var errorMsg =
                                     $"Failed to fetch items from Snowflake for SKUs: {itemsResult.ErrorMessage}";
                                 _logger.LogError("{Error} | TraceId: {TraceId}", errorMsg, _currentTraceId);
-                                await LogResultSafely("fetch_by_skus", false, requestSource, errorMsg,
-                                    requestedSkus.Count);
                                 throw new InvalidOperationException(errorMsg);
                             }
 
@@ -119,7 +117,6 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                                 var errorMsg =
                                     $"Failed to fetch latest items from Snowflake: {latestItemsResult.ErrorMessage}";
                                 _logger.LogError("{Error} | TraceId: {TraceId}", errorMsg, _currentTraceId);
-                                await LogResultSafely("fetch_latest", false, requestSource, errorMsg);
                                 throw new InvalidOperationException(errorMsg);
                             }
 
@@ -146,8 +143,6 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                     var notFoundMessage = $"SKUs not found in Snowflake: {string.Join(", ", notFoundSkus)}";
                     _logger.LogWarning("{Message} | Count: {Count} | TraceId: {TraceId}",
                         notFoundMessage, notFoundSkus.Count, _currentTraceId);
-
-                    await LogResultSafely("skus_not_found", true, requestSource, notFoundMessage, notFoundSkus.Count);
                 }
 
                 var unifiedItems = new List<UnifiedItemMaster>();
@@ -175,15 +170,19 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                             _logger.LogWarning(
                                 "SKU_MAPPED_WITH_WARNINGS | SKU: {Sku} | SkippedProperties: {Properties} | TraceId: {TraceId}",
                                 mappingResult.Sku, string.Join(", ", mappingResult.SkippedProperties), _currentTraceId);
-                            
-                            await LogResultSafely("sku_mapping_success_with_warnings", true, requestSource,
-                                null, 1, mappingResult.Sku, "PUBLISHED_WITH_WARNINGS", mappingResult.SkippedProperties);
                         }
-                        else
+                        
+                        await LogItemSourceSafely(new ItemMasterSourceLog
                         {
-                            await LogResultSafely("sku_mapping_success", true, requestSource,
-                                null, 1, mappingResult.Sku, "PUBLISHED", null);
-                        }
+                            Sku = item.Sku,
+                            SourceModel = System.Text.Json.JsonSerializer.Serialize(item),
+                            ValidationStatus = "valid",
+                            CommonModel = System.Text.Json.JsonSerializer.Serialize(mappingResult.UnifiedItem),
+                            Errors = mappingResult.SkippedProperties.Any() 
+                                ? $"Skipped optional properties: {string.Join(", ", mappingResult.SkippedProperties)}" 
+                                : null,
+                            IsSentToSqs = false
+                        });
                     }
                     else
                     {
@@ -200,10 +199,16 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                             "SKU_SKIPPED | SKU: {Sku} | ErrorCount: {ErrorCount} | Errors: {Errors} | TraceId: {TraceId}",
                             skippedItem.Sku, mappingResult.ValidationErrors.Count, 
                             string.Join("; ", mappingResult.ValidationErrors), _currentTraceId);
-
-                        await LogResultSafely("sku_mapping_failed", false, requestSource,
-                            string.Join("; ", mappingResult.ValidationErrors), 
-                            1, skippedItem.Sku, "FAILED", null);
+                        
+                        await LogItemSourceSafely(new ItemMasterSourceLog
+                        {
+                            Sku = mappingResult.Sku,
+                            SourceModel = System.Text.Json.JsonSerializer.Serialize(item),
+                            ValidationStatus = "invalid",
+                            CommonModel = null,
+                            Errors = string.Join("; ", mappingResult.ValidationErrors),
+                            IsSentToSqs = false
+                        });
                     }
                 }
 
@@ -240,12 +245,9 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                             var errorMsg = $"Failed to publish items to SQS: {publishResult.ErrorMessage}";
                             _logger.LogError("SQS Publish failed: {Error} | TraceId: {TraceId}", errorMsg,
                                 _currentTraceId);
-                            await LogResultSafely("publish_to_sqs", false, requestSource, errorMsg,
-                                unifiedItems.Count);
                             throw new InvalidOperationException(errorMsg);
                         }
 
-                        await LogResultSafely("publish_to_sqs", true, requestSource, null, unifiedItems.Count);
 
                         await _observabilityService.RecordMetricAsync("ItemsPublishedToSqs", unifiedItems.Count,
                             new Dictionary<string, string>
@@ -291,19 +293,17 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
             cancellationToken);
     }
 
-    private async Task LogResultSafely(string operation, bool success, RequestSource requestSource,
-        string? errorMessage, int? itemCount = null, string? sku = null, string? status = null, 
-        List<string>? skippedProperties = null)
+
+    private async Task LogItemSourceSafely(ItemMasterSourceLog log)
     {
         try
         {
-            await _logRepository.LogProcessingResultAsync(operation, success, requestSource, errorMessage, itemCount,
-                _currentTraceId, sku, status, skippedProperties);
+            await _logRepository.LogItemSourceAsync(log, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to log to MySQL repository | Operation: {Operation} | TraceId: {TraceId}",
-                operation, _currentTraceId);
+            _logger.LogError(ex, "Failed to log item source to MySQL repository | Sku: {Sku} | TraceId: {TraceId}",
+                log.Sku, _currentTraceId);
         }
     }
 }
