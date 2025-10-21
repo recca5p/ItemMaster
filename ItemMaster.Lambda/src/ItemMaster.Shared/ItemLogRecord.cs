@@ -10,4 +10,7 @@ public class ItemLogRecord
     public DateTime Timestamp { get; set; }
     public RequestSource RequestSource { get; set; } = RequestSource.Unknown;
     public string? TraceId { get; set; }
+    public string? Sku { get; set; }
+    public string? Status { get; set; }
+    public string? SkippedProperties { get; set; }
 }

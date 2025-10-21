@@ -22,6 +22,7 @@ public class MySqlItemMasterLogRepository : IItemMasterLogRepository
 
     public async Task<Result> LogProcessingResultAsync(string operation, bool success, RequestSource requestSource,
         string? errorMessage = null, int? itemCount = null, string? traceId = null,
+        string? sku = null, string? status = null, List<string>? skippedProperties = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -34,7 +35,12 @@ public class MySqlItemMasterLogRepository : IItemMasterLogRepository
                 ItemCount = itemCount,
                 Timestamp = _clock.UtcNow,
                 RequestSource = requestSource,
-                TraceId = traceId
+                TraceId = traceId,
+                Sku = sku,
+                Status = status,
+                SkippedProperties = skippedProperties != null && skippedProperties.Any() 
+                    ? string.Join(", ", skippedProperties) 
+                    : null
             };
 
             _context.ItemLogs.Add(logRecord);
@@ -45,8 +51,8 @@ public class MySqlItemMasterLogRepository : IItemMasterLogRepository
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Failed to log processing result to MySQL: Operation={Operation}, Success={Success}, RequestSource={RequestSource}, TraceId={TraceId}",
-                operation, success, requestSource, traceId);
+                "Failed to log processing result to MySQL: Operation={Operation}, Success={Success}, RequestSource={RequestSource}, TraceId={TraceId}, Sku={Sku}",
+                operation, success, requestSource, traceId, sku);
             return Result.Failure($"MySQL logging failed: {ex.Message}");
         }
     }

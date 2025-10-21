@@ -83,6 +83,9 @@ public class SqsItemPublisher : IItemPublisher
                 totalFailed > 0 ? $"Failed to publish {totalFailed} out of {itemList.Count} unified items" : null,
                 totalSuccessful,
                 traceId,
+                null,
+                null,
+                null,
                 cancellationToken);
 
             return totalFailed == 0
@@ -100,6 +103,9 @@ public class SqsItemPublisher : IItemPublisher
                 ex.Message,
                 null,
                 traceId,
+                null,
+                null,
+                null,
                 cancellationToken);
             return Result.Failure($"SQS publish error: {ex.Message}");
         }
@@ -277,6 +283,9 @@ public class SqsItemPublisher : IItemPublisher
                 $"MessageId: {failedMessage.Id}, Error: {errorMessage}",
                 0,
                 traceId,
+                null,
+                null,
+                null,
                 cancellationToken);
         }
 
@@ -288,6 +297,9 @@ public class SqsItemPublisher : IItemPublisher
                 null,
                 result.SuccessfulMessages.Count,
                 traceId,
+                null,
+                null,
+                null,
                 cancellationToken);
     }
 
@@ -314,7 +326,7 @@ public class SqsItemPublisher : IItemPublisher
                 batch.Add(new SendMessageBatchRequestEntry
                 {
                     Id = messageId,
-                    MessageBody = messageBody // Single item as JSON, not an array
+                    MessageBody = messageBody
                 });
             }
 

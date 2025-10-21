@@ -19,6 +19,7 @@ public class InMemoryItemMasterLogRepository : IItemMasterLogRepository
 
     public Task<Result> LogProcessingResultAsync(string operation, bool success, RequestSource requestSource,
         string? errorMessage = null, int? itemCount = null, string? traceId = null,
+        string? sku = null, string? status = null, List<string>? skippedProperties = null,
         CancellationToken cancellationToken = default)
     {
         var logRecord = new ItemLogRecord
@@ -30,14 +31,19 @@ public class InMemoryItemMasterLogRepository : IItemMasterLogRepository
             ItemCount = itemCount,
             Timestamp = _clock.UtcNow,
             RequestSource = requestSource,
-            TraceId = traceId
+            TraceId = traceId,
+            Sku = sku,
+            Status = status,
+            SkippedProperties = skippedProperties != null && skippedProperties.Any() 
+                ? string.Join(", ", skippedProperties) 
+                : null
         };
 
         _logs.Add(logRecord);
 
         _logger.LogInformation(
-            "InMemory: Logged processing result - Operation: {Operation}, Success: {Success}, RequestSource: {RequestSource}, ItemCount: {ItemCount}, TraceId: {TraceId}",
-            operation, success, requestSource, itemCount, traceId);
+            "InMemory: Logged processing result - Operation: {Operation}, Success: {Success}, RequestSource: {RequestSource}, ItemCount: {ItemCount}, TraceId: {TraceId}, Sku: {Sku}, Status: {Status}",
+            operation, success, requestSource, itemCount, traceId, sku, status);
 
         return Task.FromResult(Result.Success());
     }

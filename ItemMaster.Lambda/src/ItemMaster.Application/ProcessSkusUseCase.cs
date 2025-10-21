@@ -153,6 +153,7 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                 var unifiedItems = new List<UnifiedItemMaster>();
                 var skippedItems = new List<SkippedItemDetail>();
                 var successfulSkus = new List<string>();
+                var publishedItems = new List<PublishedItemDetail>();
 
                 foreach (var item in itemsList)
                 {
@@ -161,6 +162,28 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                     {
                         unifiedItems.Add(mappingResult.UnifiedItem);
                         successfulSkus.Add(mappingResult.Sku);
+                        
+                        publishedItems.Add(new PublishedItemDetail
+                        {
+                            Sku = mappingResult.Sku,
+                            MappedItem = mappingResult.UnifiedItem,
+                            SkippedProperties = mappingResult.SkippedProperties
+                        });
+                        
+                        if (mappingResult.SkippedProperties.Any())
+                        {
+                            _logger.LogWarning(
+                                "SKU_MAPPED_WITH_WARNINGS | SKU: {Sku} | SkippedProperties: {Properties} | TraceId: {TraceId}",
+                                mappingResult.Sku, string.Join(", ", mappingResult.SkippedProperties), _currentTraceId);
+                            
+                            await LogResultSafely("sku_mapping_success_with_warnings", true, requestSource,
+                                null, 1, mappingResult.Sku, "PUBLISHED_WITH_WARNINGS", mappingResult.SkippedProperties);
+                        }
+                        else
+                        {
+                            await LogResultSafely("sku_mapping_success", true, requestSource,
+                                null, 1, mappingResult.Sku, "PUBLISHED", null);
+                        }
                     }
                     else
                     {
@@ -168,16 +191,19 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                         {
                             Sku = mappingResult.Sku,
                             Reason = "Validation failed",
-                            ValidationFailure = mappingResult.FailureReason ?? "Unknown validation error"
+                            ValidationFailure = mappingResult.FailureReason ?? "Unknown validation error",
+                            AllValidationErrors = mappingResult.ValidationErrors
                         };
                         skippedItems.Add(skippedItem);
 
                         _logger.LogWarning(
-                            "SKU_SKIPPED | SKU: {Sku} | Reason: {Reason} | TraceId: {TraceId}",
-                            skippedItem.Sku, skippedItem.ValidationFailure, _currentTraceId);
+                            "SKU_SKIPPED | SKU: {Sku} | ErrorCount: {ErrorCount} | Errors: {Errors} | TraceId: {TraceId}",
+                            skippedItem.Sku, mappingResult.ValidationErrors.Count, 
+                            string.Join("; ", mappingResult.ValidationErrors), _currentTraceId);
 
-                        await LogResultSafely("sku_mapping_failed", true, requestSource,
-                            $"SKU: {skippedItem.Sku} | Reason: {skippedItem.ValidationFailure}", 1);
+                        await LogResultSafely("sku_mapping_failed", false, requestSource,
+                            string.Join("; ", mappingResult.ValidationErrors), 
+                            1, skippedItem.Sku, "FAILED", null);
                     }
                 }
 
@@ -246,7 +272,8 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
                     Failed = skippedItems.Count,
                     SkusNotFound = notFoundSkus,
                     SkippedItems = skippedItems,
-                    SuccessfulSkus = successfulSkus
+                    SuccessfulSkus = successfulSkus,
+                    PublishedItems = publishedItems
                 };
 
                 _logger.LogInformation(
@@ -265,12 +292,13 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
     }
 
     private async Task LogResultSafely(string operation, bool success, RequestSource requestSource,
-        string? errorMessage, int? itemCount = null)
+        string? errorMessage, int? itemCount = null, string? sku = null, string? status = null, 
+        List<string>? skippedProperties = null)
     {
         try
         {
             await _logRepository.LogProcessingResultAsync(operation, success, requestSource, errorMessage, itemCount,
-                _currentTraceId);
+                _currentTraceId, sku, status, skippedProperties);
         }
         catch (Exception ex)
         {

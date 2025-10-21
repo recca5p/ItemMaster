@@ -9,7 +9,7 @@ public class MySqlDbContext : DbContext
     {
     }
 
-    public DbSet<ItemLogRecord> ItemLogs { get; set; }
+    public DbSet<ItemLogRecord> ItemLogs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +24,9 @@ public class MySqlDbContext : DbContext
             entity.Property(e => e.Timestamp).IsRequired();
             entity.Property(e => e.RequestSource).IsRequired().HasConversion<int>();
             entity.Property(e => e.TraceId).HasMaxLength(50);
+            entity.Property(e => e.Sku).HasMaxLength(100);
+            entity.Property(e => e.Status).HasMaxLength(50);
+            entity.Property(e => e.SkippedProperties).HasMaxLength(2000);
             entity.ToTable("item_master_logs");
         });
 
