@@ -1,8 +1,7 @@
 using Amazon;
 using Amazon.Extensions.NETCore.Setup;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
 using ItemMaster.Lambda.Configuration;
+using Microsoft.Extensions.Configuration;
 
 namespace ItemMaster.Lambda.Services;
 
@@ -26,18 +25,21 @@ public class ConfigurationService : IConfigurationService
 
         if (!testMode)
         {
-            options.Environment = Environment.GetEnvironmentVariable(ConfigurationConstants.DOTNET_ENVIRONMENT) 
-                ?? throw new InvalidOperationException($"{ConfigurationConstants.DOTNET_ENVIRONMENT} environment variable is required");
-            
-            options.ConfigBase = Environment.GetEnvironmentVariable(ConfigurationConstants.CONFIG_BASE) 
-                ?? throw new InvalidOperationException($"{ConfigurationConstants.CONFIG_BASE} environment variable is required");
-            
-            options.Region = Environment.GetEnvironmentVariable(ConfigurationConstants.REGION) 
-                ?? throw new InvalidOperationException($"{ConfigurationConstants.REGION} environment variable is required");
+            options.Environment = Environment.GetEnvironmentVariable(ConfigurationConstants.DOTNET_ENVIRONMENT)
+                                  ?? throw new InvalidOperationException(
+                                      $"{ConfigurationConstants.DOTNET_ENVIRONMENT} environment variable is required");
+
+            options.ConfigBase = Environment.GetEnvironmentVariable(ConfigurationConstants.CONFIG_BASE)
+                                 ?? throw new InvalidOperationException(
+                                     $"{ConfigurationConstants.CONFIG_BASE} environment variable is required");
+
+            options.Region = Environment.GetEnvironmentVariable(ConfigurationConstants.REGION)
+                             ?? throw new InvalidOperationException(
+                                 $"{ConfigurationConstants.REGION} environment variable is required");
         }
 
-        var applyMigrations = Environment.GetEnvironmentVariable(ConfigurationConstants.APPLY_MIGRATIONS) 
-            ?? Environment.GetEnvironmentVariable(ConfigurationConstants.APPLY_MIGATIONS);
+        var applyMigrations = Environment.GetEnvironmentVariable(ConfigurationConstants.APPLY_MIGRATIONS)
+                              ?? Environment.GetEnvironmentVariable(ConfigurationConstants.APPLY_MIGATIONS);
         options.ApplyMigrations = string.Equals(applyMigrations, "true", StringComparison.OrdinalIgnoreCase);
 
         return options;
@@ -46,11 +48,9 @@ public class ConfigurationService : IConfigurationService
     public IConfiguration BuildConfiguration(LambdaStartupOptions options)
     {
         if (options.TestMode)
-        {
             return new ConfigurationBuilder()
                 .AddEnvironmentVariables()
                 .Build();
-        }
 
         var envLower = options.Environment.ToLowerInvariant();
         return new ConfigurationBuilder()

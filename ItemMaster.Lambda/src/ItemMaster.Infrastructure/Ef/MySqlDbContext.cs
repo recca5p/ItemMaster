@@ -13,7 +13,6 @@ public class MySqlDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-
         modelBuilder.Entity<ItemMasterSourceLog>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -25,9 +24,9 @@ public class MySqlDbContext : DbContext
             entity.Property(e => e.Errors).HasColumnType("text");
             entity.Property(e => e.IsSentToSqs).IsRequired();
             entity.Property(e => e.CreatedAt).IsRequired();
-            
+
             entity.HasIndex(e => e.Sku).HasDatabaseName("IX_ItemMasterSourceLog_Sku");
-            
+
             entity.ToTable("item_master_source_log");
         });
 

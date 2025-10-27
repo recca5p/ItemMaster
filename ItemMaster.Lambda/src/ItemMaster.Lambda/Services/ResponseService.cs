@@ -1,7 +1,5 @@
 using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
-using ItemMaster.Contracts;
-using ItemMaster.Shared;
 
 namespace ItemMaster.Lambda.Services;
 
@@ -20,6 +18,7 @@ public class ResponseService : IResponseService
     {
         _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
     }
+
     public APIGatewayProxyResponse CreateSuccessResponse<T>(T data, string traceId)
     {
         return new APIGatewayProxyResponse
@@ -61,4 +60,3 @@ public class ResponseService : IResponseService
         };
     }
 }
-

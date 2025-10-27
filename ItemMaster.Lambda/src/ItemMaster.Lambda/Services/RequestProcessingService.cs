@@ -14,8 +14,8 @@ public interface IRequestProcessingService
 
 public class RequestProcessingService : IRequestProcessingService
 {
-    private readonly ILogger<RequestProcessingService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly ILogger<RequestProcessingService> _logger;
 
     public RequestProcessingService(ILogger<RequestProcessingService> logger)
     {
@@ -28,7 +28,7 @@ public class RequestProcessingService : IRequestProcessingService
         try
         {
             var inputJson = ConvertInputToJson(input);
-            
+
             return requestSource switch
             {
                 RequestSource.EventBridge => ParseEventBridgeRequest(inputJson, traceId),
@@ -38,7 +38,8 @@ public class RequestProcessingService : IRequestProcessingService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse request, using default | RequestSource: {RequestSource} | TraceId: {TraceId}", 
+            _logger.LogWarning(ex,
+                "Failed to parse request, using default | RequestSource: {RequestSource} | TraceId: {TraceId}",
                 requestSource, traceId);
             return new ProcessSkusRequest();
         }
@@ -68,10 +69,8 @@ public class RequestProcessingService : IRequestProcessingService
         {
             var eventDoc = JsonDocument.Parse(inputJson);
             if (eventDoc.RootElement.TryGetProperty("detail", out var detail))
-            {
-                return JsonSerializer.Deserialize<ProcessSkusRequest>(detail.GetRawText(), _jsonOptions) 
+                return JsonSerializer.Deserialize<ProcessSkusRequest>(detail.GetRawText(), _jsonOptions)
                        ?? new ProcessSkusRequest();
-            }
         }
         catch (Exception ex)
         {
@@ -90,12 +89,9 @@ public class RequestProcessingService : IRequestProcessingService
 
             if (!string.IsNullOrWhiteSpace(bodyRaw))
             {
-                if (apiGwRequest?.IsBase64Encoded == true)
-                {
-                    bodyRaw = DecodeBase64Body(bodyRaw, traceId);
-                }
+                if (apiGwRequest?.IsBase64Encoded == true) bodyRaw = DecodeBase64Body(bodyRaw, traceId);
 
-                return JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, _jsonOptions) 
+                return JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, _jsonOptions)
                        ?? new ProcessSkusRequest();
             }
         }
@@ -111,7 +107,7 @@ public class RequestProcessingService : IRequestProcessingService
     {
         try
         {
-            return JsonSerializer.Deserialize<ProcessSkusRequest>(inputJson, _jsonOptions) 
+            return JsonSerializer.Deserialize<ProcessSkusRequest>(inputJson, _jsonOptions)
                    ?? new ProcessSkusRequest();
         }
         catch (Exception ex)

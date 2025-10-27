@@ -1,4 +1,3 @@
-using ItemMaster.Contracts;
 using ItemMaster.Domain;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
@@ -8,15 +7,18 @@ namespace ItemMaster.Application.Services;
 
 public interface IItemFetchingService
 {
-    Task<List<Item>> FetchItemsBySkusAsync(List<string> skus, RequestSource requestSource, string traceId, CancellationToken cancellationToken);
-    Task<List<Item>> FetchLatestItemsAsync(int limit, RequestSource requestSource, string traceId, CancellationToken cancellationToken);
+    Task<List<Item>> FetchItemsBySkusAsync(List<string> skus, RequestSource requestSource, string traceId,
+        CancellationToken cancellationToken);
+
+    Task<List<Item>> FetchLatestItemsAsync(int limit, RequestSource requestSource, string traceId,
+        CancellationToken cancellationToken);
 }
 
 public class ItemFetchingService : IItemFetchingService
 {
-    private readonly ISnowflakeRepository _snowflakeRepository;
-    private readonly IObservabilityService _observabilityService;
     private readonly ILogger<ItemFetchingService> _logger;
+    private readonly IObservabilityService _observabilityService;
+    private readonly ISnowflakeRepository _snowflakeRepository;
 
     public ItemFetchingService(
         ISnowflakeRepository snowflakeRepository,
@@ -28,7 +30,8 @@ public class ItemFetchingService : IItemFetchingService
         _logger = logger;
     }
 
-    public async Task<List<Item>> FetchItemsBySkusAsync(List<string> skus, RequestSource requestSource, string traceId, CancellationToken cancellationToken)
+    public async Task<List<Item>> FetchItemsBySkusAsync(List<string> skus, RequestSource requestSource, string traceId,
+        CancellationToken cancellationToken)
     {
         return await _observabilityService.ExecuteWithObservabilityAsync(
             "FetchItemsBySkus",
@@ -63,7 +66,8 @@ public class ItemFetchingService : IItemFetchingService
             cancellationToken);
     }
 
-    public async Task<List<Item>> FetchLatestItemsAsync(int limit, RequestSource requestSource, string traceId, CancellationToken cancellationToken)
+    public async Task<List<Item>> FetchLatestItemsAsync(int limit, RequestSource requestSource, string traceId,
+        CancellationToken cancellationToken)
     {
         return await _observabilityService.ExecuteWithObservabilityAsync(
             "FetchLatestItems",

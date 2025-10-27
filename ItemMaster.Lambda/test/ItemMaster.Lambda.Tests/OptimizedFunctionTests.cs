@@ -49,6 +49,11 @@ public class TestLambdaContext : ILambdaContext
 
 public class TestLambdaLogger : ILambdaLogger
 {
-    public void Log(string message) { }
-    public void LogLine(string message) { }
+    public void Log(string message)
+    {
+    }
+
+    public void LogLine(string message)
+    {
+    }
 }

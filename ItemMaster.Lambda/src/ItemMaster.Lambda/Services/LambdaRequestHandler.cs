@@ -2,7 +2,6 @@ using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using ItemMaster.Application;
 using ItemMaster.Infrastructure.Observability;
-using ItemMaster.Lambda.Services;
 using ItemMaster.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,7 +18,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
 {
     // Configuration constants
     private const int LAMBDA_TIMEOUT_BUFFER_SECONDS = 30;
-    
+
     private readonly ServiceProvider _serviceProvider;
 
     public LambdaRequestHandler(ServiceProvider serviceProvider)
@@ -30,7 +29,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
     public async Task<APIGatewayProxyResponse> HandleRequestAsync(object input, ILambdaContext context)
     {
         using var scope = _serviceProvider.CreateScope();
-        
+
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<LambdaRequestHandler>>();
         var requestSourceDetector = scope.ServiceProvider.GetRequiredService<IRequestSourceDetector>();
         var requestProcessingService = scope.ServiceProvider.GetRequiredService<IRequestProcessingService>();
@@ -39,13 +38,10 @@ public class LambdaRequestHandler : ILambdaRequestHandler
 
         var requestSource = requestSourceDetector.DetectSource(input);
 
-        if (IsHealthCheckRequest(requestSource))
-        {
-            return HandleHealthCheckRequest(responseService, logger);
-        }
+        if (IsHealthCheckRequest(requestSource)) return HandleHealthCheckRequest(responseService, logger);
 
         return await ProcessBusinessRequest(
-            input, context, requestSource, logger, requestProcessingService, 
+            input, context, requestSource, logger, requestProcessingService,
             responseService, observabilityService, scope);
     }
 
@@ -55,7 +51,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
     }
 
     private static APIGatewayProxyResponse HandleHealthCheckRequest(
-        IResponseService responseService, 
+        IResponseService responseService,
         ILogger<LambdaRequestHandler> logger)
     {
         var healthResponse = responseService.CreateHealthCheckResponse();
@@ -104,7 +100,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
 
         var processRequest = requestProcessingService.ParseRequest(input, requestSource, traceId);
         var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
-        
+
         var cancellationToken = CreateCancellationToken(context);
         var result = await useCase.ExecuteAsync(processRequest, requestSource, traceId, cancellationToken);
 
@@ -121,7 +117,8 @@ public class LambdaRequestHandler : ILambdaRequestHandler
     private static CancellationToken CreateCancellationToken(ILambdaContext context)
     {
         return context.RemainingTime > TimeSpan.FromSeconds(LAMBDA_TIMEOUT_BUFFER_SECONDS)
-            ? new CancellationTokenSource(context.RemainingTime.Subtract(TimeSpan.FromSeconds(LAMBDA_TIMEOUT_BUFFER_SECONDS))).Token
+            ? new CancellationTokenSource(
+                context.RemainingTime.Subtract(TimeSpan.FromSeconds(LAMBDA_TIMEOUT_BUFFER_SECONDS))).Token
             : CancellationToken.None;
     }
 

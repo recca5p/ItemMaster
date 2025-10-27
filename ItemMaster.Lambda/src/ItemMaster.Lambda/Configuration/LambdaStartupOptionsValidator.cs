@@ -12,15 +12,15 @@ public class LambdaStartupOptionsValidator : IValidateOptions<LambdaStartupOptio
         {
             if (string.IsNullOrWhiteSpace(options.Environment))
                 failures.Add("Environment is required when not in test mode");
-            
+
             if (string.IsNullOrWhiteSpace(options.ConfigBase))
                 failures.Add("ConfigBase is required when not in test mode");
-            
+
             if (string.IsNullOrWhiteSpace(options.Region))
                 failures.Add("Region is required when not in test mode");
         }
 
-        return failures.Count > 0 
+        return failures.Count > 0
             ? ValidateOptionsResult.Fail(failures)
             : ValidateOptionsResult.Success;
     }

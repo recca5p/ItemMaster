@@ -11,4 +11,3 @@ public class ItemMasterSourceLog
     public bool IsSentToSqs { get; set; }
     public DateTime CreatedAt { get; set; }
 }
-

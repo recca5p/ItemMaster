@@ -1,20 +1,21 @@
 using ItemMaster.Contracts;
+using ItemMaster.Domain;
 
 namespace ItemMaster.Application.Services;
 
 public interface IProcessingResponseBuilder
 {
     ProcessSkusResponse CreateSuccessResponse(
-        List<Domain.Item> itemsList, 
-        List<string> notFoundSkus, 
+        List<Item> itemsList,
+        List<string> notFoundSkus,
         ItemMappingResult mappingResult);
 }
 
 public class ProcessingResponseBuilder : IProcessingResponseBuilder
 {
     public ProcessSkusResponse CreateSuccessResponse(
-        List<Domain.Item> itemsList, 
-        List<string> notFoundSkus, 
+        List<Item> itemsList,
+        List<string> notFoundSkus,
         ItemMappingResult mappingResult)
     {
         return new ProcessSkusResponse

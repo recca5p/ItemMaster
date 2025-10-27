@@ -369,7 +369,8 @@ When `ITEMMASTER_TEST_MODE=true`:
 - `sqs/circuit_breaker_sampling_duration_seconds` (String) - Sampling window duration in seconds (default: 60)
 - `sqs/circuit_breaker_minimum_throughput` (String) - Minimum throughput before circuit breaker activates (default: 3)
 
-**Note:** Parameters above are application config; the RSA private key itself is stored in **Secrets Manager** and referenced via `SSM_RSA_PATH` (secret name/ARN).
+**Note:** Parameters above are application config; the RSA private key itself is stored in **Secrets Manager** and
+referenced via `SSM_RSA_PATH` (secret name/ARN).
 
 ### Snowflake RSA Authentication
 
@@ -405,6 +406,7 @@ When `ITEMMASTER_TEST_MODE=true`:
 **Database Schema:**
 
 The `item_master_source_log` table tracks every item processed:
+
 - **Sku**: Item identifier
 - **SourceModel**: Original data from Snowflake (JSON)
 - **ValidationStatus**: "valid" or "invalid"
@@ -575,4 +577,6 @@ Updated diagrams:
 - `docs/error-handling-resilience.png`
 - `docs/data-flow-architecture.png`
 
-These reflect the new logic: request source detection, health check short-circuit, observability wrappers, strict item validation + mapping, one-item-per-message SQS publishing with partial batch retry, circuit breaker, and MySQL audit logging.
+These reflect the new logic: request source detection, health check short-circuit, observability wrappers, strict item
+validation + mapping, one-item-per-message SQS publishing with partial batch retry, circuit breaker, and MySQL audit
+logging.

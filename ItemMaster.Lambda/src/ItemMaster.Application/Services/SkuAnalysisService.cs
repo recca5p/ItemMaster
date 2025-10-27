@@ -1,17 +1,18 @@
+using ItemMaster.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace ItemMaster.Application.Services;
 
 public interface ISkuAnalysisService
 {
-    List<string> AnalyzeNotFoundSkus(List<string> requestedSkus, List<Domain.Item> itemsList);
+    List<string> AnalyzeNotFoundSkus(List<string> requestedSkus, List<Item> itemsList);
 }
 
 public class SkuAnalysisService : ISkuAnalysisService
 {
     // Configuration constants
     private const string NOT_FOUND_MESSAGE_TEMPLATE = "SKUs not found in Snowflake: {NotFoundSkus}";
-    
+
     private readonly ILogger<SkuAnalysisService> _logger;
 
     public SkuAnalysisService(ILogger<SkuAnalysisService> logger)
@@ -19,9 +20,9 @@ public class SkuAnalysisService : ISkuAnalysisService
         _logger = logger;
     }
 
-    public List<string> AnalyzeNotFoundSkus(List<string> requestedSkus, List<Domain.Item> itemsList)
+    public List<string> AnalyzeNotFoundSkus(List<string> requestedSkus, List<Item> itemsList)
     {
-        if (!requestedSkus.Any()) 
+        if (!requestedSkus.Any())
             return new List<string>();
 
         var foundSkus = CreateFoundSkusSet(itemsList);
@@ -32,7 +33,7 @@ public class SkuAnalysisService : ISkuAnalysisService
         return notFoundSkus;
     }
 
-    private static HashSet<string> CreateFoundSkusSet(List<Domain.Item> itemsList)
+    private static HashSet<string> CreateFoundSkusSet(List<Item> itemsList)
     {
         return itemsList.Select(i => i.Sku).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
@@ -47,7 +48,7 @@ public class SkuAnalysisService : ISkuAnalysisService
         if (notFoundSkus.Any())
         {
             var notFoundMessage = string.Join(", ", notFoundSkus);
-            _logger.LogWarning(NOT_FOUND_MESSAGE_TEMPLATE + " | Count: {Count}", 
+            _logger.LogWarning(NOT_FOUND_MESSAGE_TEMPLATE + " | Count: {Count}",
                 notFoundMessage, notFoundSkus.Count);
         }
     }

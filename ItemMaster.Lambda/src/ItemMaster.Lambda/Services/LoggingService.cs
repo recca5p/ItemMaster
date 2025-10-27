@@ -1,9 +1,9 @@
+using ItemMaster.Lambda.Configuration;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
 using Serilog.Formatting.Compact;
-using ItemMaster.Lambda.Configuration;
 
 namespace ItemMaster.Lambda.Services;
 
@@ -17,7 +17,7 @@ public class LoggingService : ILoggingService
     public void ConfigureSerilog(IConfiguration? configuration)
     {
         if (Log.Logger is Logger l && l != Logger.None) return;
-        
+
         var levelRaw = configuration?[ConfigurationConstants.LOG_LEVEL] ?? ConfigurationConstants.DEFAULT_LOG_LEVEL;
         var parsed = levelRaw.ToLowerInvariant() switch
         {
@@ -28,7 +28,7 @@ public class LoggingService : ILoggingService
             "fatal" => LogEventLevel.Fatal,
             _ => LogEventLevel.Information
         };
-        
+
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Is(parsed)
             .Enrich.FromLogContext()
@@ -37,4 +37,3 @@ public class LoggingService : ILoggingService
             .CreateLogger();
     }
 }
-

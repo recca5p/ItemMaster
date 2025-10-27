@@ -1,8 +1,7 @@
-using Microsoft.Extensions.Configuration;
 using ItemMaster.Lambda.Configuration;
+using Microsoft.Extensions.Configuration;
 
 namespace ItemMaster.Lambda.Services;
-
 
 public interface IConfigurationValidationService
 {
@@ -17,10 +16,7 @@ public class ConfigurationValidationService : IConfigurationValidationService
 
         // Validate SQS configuration
         var sqsUrl = configuration[ConfigurationConstants.SQS_URL];
-        if (string.IsNullOrWhiteSpace(sqsUrl))
-        {
-            errors.Add("Missing SQS URL configuration");
-        }
+        if (string.IsNullOrWhiteSpace(sqsUrl)) errors.Add("Missing SQS URL configuration");
 
         // Validate Snowflake configuration
         var sfDb = configuration[ConfigurationConstants.SNOWFLAKE_DATABASE];
@@ -30,17 +26,17 @@ public class ConfigurationValidationService : IConfigurationValidationService
 
         if (string.IsNullOrWhiteSpace(sfDb))
             errors.Add("Missing Snowflake database configuration");
-        
+
         if (string.IsNullOrWhiteSpace(sfSchema))
             errors.Add("Missing Snowflake schema configuration");
-        
+
         if (string.IsNullOrWhiteSpace(sfTable))
             errors.Add("Missing Snowflake table configuration");
-        
+
         if (string.IsNullOrWhiteSpace(sfWarehouse))
             errors.Add("Missing Snowflake warehouse configuration");
 
-        return errors.Any() 
+        return errors.Any()
             ? ConfigurationValidationResult.Failure(errors)
             : ConfigurationValidationResult.Success();
     }

@@ -1,6 +1,6 @@
+using ItemMaster.Application.Services;
 using ItemMaster.Contracts;
 using ItemMaster.Shared;
-using ItemMaster.Application.Services;
 using Microsoft.Extensions.Logging;
 
 namespace ItemMaster.Application;
@@ -9,9 +9,9 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
 {
     // Configuration constants
     private const string USE_CASE_NAME = "ProcessSkusUseCase";
-    
-    private readonly ISkuProcessingOrchestrator _orchestrator;
     private readonly ILogger<ProcessSkusUseCase> _logger;
+
+    private readonly ISkuProcessingOrchestrator _orchestrator;
 
     public ProcessSkusUseCase(
         ISkuProcessingOrchestrator orchestrator,
@@ -28,7 +28,7 @@ public class ProcessSkusUseCase : IProcessSkusUseCase
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        
+
         var currentTraceId = traceId ?? Guid.NewGuid().ToString("N");
 
         _logger.LogDebug("{UseCase} started | RequestSource: {RequestSource} | TraceId: {TraceId}",

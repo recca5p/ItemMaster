@@ -1,5 +1,5 @@
-using Microsoft.Extensions.DependencyInjection;
 using ItemMaster.Shared;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace ItemMaster.Lambda.Services;

@@ -11,9 +11,9 @@ public interface IDatabaseMigrationService
 
 public class DatabaseMigrationService : IDatabaseMigrationService
 {
+    private static bool _migrationsApplied;
     private readonly MySqlDbContext _dbContext;
     private readonly ILogger<DatabaseMigrationService> _logger;
-    private static bool _migrationsApplied;
 
     public DatabaseMigrationService(MySqlDbContext dbContext, ILogger<DatabaseMigrationService> logger)
     {

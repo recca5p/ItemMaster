@@ -18,7 +18,7 @@ public class UnifiedItemMapper : IUnifiedItemMapper
     private const string InventorySyncDefault = "ON";
     private const string ImageSizeType = "original_size";
     private const string ShopifyLinkSource = "Shopify US";
-    
+
     // Date constants
     private static readonly DateTimeOffset BarcodeLogicCutoffDate = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -35,50 +35,33 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         var skippedProperties = new List<string>();
 
         // Core validation: SKU, Name/Title, Barcode must be present
-        if (string.IsNullOrWhiteSpace(item.Sku))
-        {
-            validationErrors.Add("Missing SKU");
-        }
+        if (string.IsNullOrWhiteSpace(item.Sku)) validationErrors.Add("Missing SKU");
 
-        if (string.IsNullOrWhiteSpace(item.ProductTitle))
-        {
-            validationErrors.Add("Missing ProductTitle (Name)");
-        }
+        if (string.IsNullOrWhiteSpace(item.ProductTitle)) validationErrors.Add("Missing ProductTitle (Name)");
 
         // Either Barcode or SecondaryBarcode must have value
         if (string.IsNullOrWhiteSpace(item.Barcode) && string.IsNullOrWhiteSpace(item.SecondaryBarcode))
-        {
             validationErrors.Add("Missing both Barcode and SecondaryBarcode");
-        }
 
         // HTS code validation - must be 10 characters
         if (string.IsNullOrWhiteSpace(item.Hts) || item.Hts.Length != RequiredHtsCodeLength)
-        {
             validationErrors.Add($"Invalid HTS code (must be {RequiredHtsCodeLength} digits, got: '{item.Hts}')");
-        }
 
         // Country of Origin validation - must be 2 characters
         if (string.IsNullOrWhiteSpace(item.CountryOfOrigin) || item.CountryOfOrigin.Length != RequiredCountryCodeLength)
-        {
-            validationErrors.Add($"Invalid CountryOfOrigin (must be {RequiredCountryCodeLength} chars, got: '{item.CountryOfOrigin}')");
-        }
+            validationErrors.Add(
+                $"Invalid CountryOfOrigin (must be {RequiredCountryCodeLength} chars, got: '{item.CountryOfOrigin}')");
 
         // Color and Size validation
-        if (string.IsNullOrWhiteSpace(item.Color))
-        {
-            validationErrors.Add("Missing Color");
-        }
+        if (string.IsNullOrWhiteSpace(item.Color)) validationErrors.Add("Missing Color");
 
-        if (string.IsNullOrWhiteSpace(item.Size))
-        {
-            validationErrors.Add("Missing Size");
-        }
+        if (string.IsNullOrWhiteSpace(item.Size)) validationErrors.Add("Missing Size");
 
         // If there are critical validation errors, return failure with all errors
         if (validationErrors.Any())
         {
             var sku = string.IsNullOrWhiteSpace(item.Sku) ? "UNKNOWN" : item.Sku;
-            _logger.LogWarning("Item {Sku} failed validation with {ErrorCount} errors: {Errors}", 
+            _logger.LogWarning("Item {Sku} failed validation with {ErrorCount} errors: {Errors}",
                 sku, validationErrors.Count, string.Join("; ", validationErrors));
             return MappingResult.Failure(sku, validationErrors);
         }
@@ -97,7 +80,7 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         // Track optional properties that are missing
         if (string.IsNullOrWhiteSpace(item.Description))
             skippedProperties.Add("Description");
-        
+
         if (string.IsNullOrWhiteSpace(item.ChinaHts))
             skippedProperties.Add("ChinaHtsCode");
 
@@ -140,32 +123,24 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         if (item.Cost > 0 || item.LandedCost > 0)
         {
             if (item.Cost > 0)
-            {
                 unifiedItem.Costs.Add(new CostInfo
                 {
                     Type = "unit",
                     Currency = "USD",
                     Value = (decimal)item.Cost
                 });
-            }
             else
-            {
                 skippedProperties.Add("Cost.unit");
-            }
 
             if (item.LandedCost > 0)
-            {
                 unifiedItem.Costs.Add(new CostInfo
                 {
                     Type = "landed",
                     Currency = "USD",
                     Value = (decimal)item.LandedCost
                 });
-            }
             else
-            {
                 skippedProperties.Add("Cost.landed");
-            }
         }
         else
         {
@@ -182,7 +157,7 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             });
         else
             skippedProperties.Add("Category.aka");
-            
+
         if (!string.IsNullOrWhiteSpace(item.ProductType))
             unifiedItem.Categories.Add(new CategoryInfo
             {
@@ -258,7 +233,7 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             });
         else
             skippedProperties.Add("Image.Pos1");
-            
+
         if (!string.IsNullOrWhiteSpace(item.ProductImageUrlPos2))
             unifiedItem.Images.Add(new ImageInfo
             {
@@ -267,7 +242,7 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             });
         else
             skippedProperties.Add("Image.Pos2");
-            
+
         if (!string.IsNullOrWhiteSpace(item.ProductImageUrlPos3))
             unifiedItem.Images.Add(new ImageInfo
             {
@@ -288,7 +263,7 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             });
         else
             skippedProperties.Add("Date.Shopify");
-            
+
         if (item.CreatedAtSnowflake.HasValue)
             unifiedItem.Dates.Add(new DateInfo
             {
@@ -300,10 +275,9 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             skippedProperties.Add("Date.Snowflake");
 
         if (skippedProperties.Any())
-        {
-            _logger.LogInformation("Item {Sku} mapped successfully with {SkippedCount} optional properties skipped: {Properties}",
+            _logger.LogInformation(
+                "Item {Sku} mapped successfully with {SkippedCount} optional properties skipped: {Properties}",
                 item.Sku, skippedProperties.Count, string.Join(", ", skippedProperties));
-        }
 
         return MappingResult.Success(unifiedItem, item.Sku, skippedProperties);
     }

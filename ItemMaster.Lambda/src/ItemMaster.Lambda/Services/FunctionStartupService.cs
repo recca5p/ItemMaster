@@ -1,5 +1,3 @@
-using ItemMaster.Lambda.Configuration;
-using ItemMaster.Lambda.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -8,9 +6,9 @@ namespace ItemMaster.Lambda.Services;
 
 public interface IFunctionStartupService
 {
-    ServiceProvider InitializeServices();
     bool HasStartupError { get; }
     string? StartupErrorMessage { get; }
+    ServiceProvider InitializeServices();
 }
 
 public class FunctionStartupService : IFunctionStartupService
@@ -43,19 +41,19 @@ public class FunctionStartupService : IFunctionStartupService
     {
         var configurationService = new ConfigurationService();
         var loggingService = new LoggingService();
-        
+
         var startupOptions = configurationService.GetStartupOptions();
         var configuration = configurationService.BuildConfiguration(startupOptions);
-        
+
         loggingService.ConfigureSerilog(configuration);
 
         var configValidationService = new ConfigurationValidationService();
         var connectionStringService = new ConnectionStringService(
             LoggerFactory.Create(builder => builder.AddSerilog())
                 .CreateLogger<ConnectionStringService>());
-        
+
         var dependencyInjectionService = new DependencyInjectionService(
-            configValidationService, 
+            configValidationService,
             connectionStringService);
 
         return dependencyInjectionService.BuildServiceProvider(configuration, startupOptions.TestMode);

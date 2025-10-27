@@ -7,14 +7,15 @@ namespace ItemMaster.Application.Services;
 
 public interface IItemPublishingService
 {
-    Task PublishItemsAsync(List<UnifiedItemMaster> unifiedItems, RequestSource requestSource, string traceId, CancellationToken cancellationToken);
+    Task PublishItemsAsync(List<UnifiedItemMaster> unifiedItems, RequestSource requestSource, string traceId,
+        CancellationToken cancellationToken);
 }
 
 public class ItemPublishingService : IItemPublishingService
 {
     private readonly IItemPublisher _itemPublisher;
-    private readonly IObservabilityService _observabilityService;
     private readonly ILogger<ItemPublishingService> _logger;
+    private readonly IObservabilityService _observabilityService;
 
     public ItemPublishingService(
         IItemPublisher itemPublisher,
@@ -26,14 +27,16 @@ public class ItemPublishingService : IItemPublishingService
         _logger = logger;
     }
 
-    public async Task PublishItemsAsync(List<UnifiedItemMaster> unifiedItems, RequestSource requestSource, string traceId, CancellationToken cancellationToken)
+    public async Task PublishItemsAsync(List<UnifiedItemMaster> unifiedItems, RequestSource requestSource,
+        string traceId, CancellationToken cancellationToken)
     {
         await _observabilityService.ExecuteWithObservabilityAsync(
             "PublishToSqs",
             requestSource,
             async () =>
             {
-                var publishResult = await _itemPublisher.PublishUnifiedItemsAsync(unifiedItems, traceId, cancellationToken);
+                var publishResult =
+                    await _itemPublisher.PublishUnifiedItemsAsync(unifiedItems, traceId, cancellationToken);
 
                 if (!publishResult.IsSuccess)
                 {

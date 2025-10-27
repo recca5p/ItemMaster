@@ -32,7 +32,7 @@ public class MappingResult
             FailureReason = string.Join("; ", validationErrors)
         };
     }
-    
+
     public static MappingResult Failure(string sku, string reason)
     {
         return new MappingResult

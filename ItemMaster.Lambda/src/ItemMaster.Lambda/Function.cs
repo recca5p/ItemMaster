@@ -16,7 +16,7 @@ public class Function
     // Configuration constants
     private const string STARTUP_ERROR_MESSAGE = "startup";
     private const string UNKNOWN_TRACE_ID = "unknown";
-    
+
     private static readonly ServiceProvider? ServiceProvider;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly IFunctionStartupService StartupService;
@@ -27,7 +27,7 @@ public class Function
         AWSSDKHandler.RegisterXRayForAllServices();
 
         StartupService = new FunctionStartupService();
-        
+
         try
         {
             ServiceProvider = StartupService.InitializeServices();
@@ -45,7 +45,7 @@ public class Function
         {
             var responseService = new ResponseService();
             return responseService.CreateErrorResponse(
-                StartupService.StartupErrorMessage ?? STARTUP_ERROR_MESSAGE, 
+                StartupService.StartupErrorMessage ?? STARTUP_ERROR_MESSAGE,
                 UNKNOWN_TRACE_ID);
         }
 
