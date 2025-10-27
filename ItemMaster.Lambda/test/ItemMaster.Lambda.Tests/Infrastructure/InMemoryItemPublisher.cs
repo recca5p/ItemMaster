@@ -3,7 +3,7 @@ using ItemMaster.Domain;
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 
-namespace ItemMaster.Infrastructure;
+namespace ItemMaster.Lambda.Tests.Infrastructure;
 
 public class InMemoryItemPublisher : IItemPublisher
 {
@@ -14,7 +14,6 @@ public class InMemoryItemPublisher : IItemPublisher
     {
         _logger = logger;
     }
-
 
     public Task<Result> PublishUnifiedItemsAsync(IEnumerable<UnifiedItemMaster> items, string? traceId = null,
         CancellationToken cancellationToken = default)

@@ -4,15 +4,6 @@ using ItemMaster.Shared;
 
 namespace ItemMaster.Infrastructure.Observability;
 
-public interface IMetricsService
-{
-    Task RecordProcessingMetricAsync(string operation, bool success, RequestSource requestSource,
-        int? itemCount = null, TimeSpan? duration = null, CancellationToken cancellationToken = default);
-
-    Task RecordCustomMetricAsync(string metricName, double value, string unit = "Count",
-        Dictionary<string, string>? dimensions = null, CancellationToken cancellationToken = default);
-}
-
 public class CloudWatchMetricsService : IMetricsService
 {
     private readonly IAmazonCloudWatch _cloudWatch;
@@ -97,64 +88,4 @@ public class CloudWatchMetricsService : IMetricsService
             }
         }, cancellationToken);
     }
-}
-
-public class InMemoryMetricsService : IMetricsService
-{
-    private readonly List<MetricRecord> _metrics = new();
-
-    public Task RecordProcessingMetricAsync(string operation, bool success, RequestSource requestSource,
-        int? itemCount = null, TimeSpan? duration = null, CancellationToken cancellationToken = default)
-    {
-        _metrics.Add(new MetricRecord
-        {
-            Operation = operation,
-            Success = success,
-            RequestSource = requestSource,
-            ItemCount = itemCount,
-            Duration = duration,
-            Timestamp = DateTime.UtcNow
-        });
-
-        return Task.CompletedTask;
-    }
-
-    public Task RecordCustomMetricAsync(string metricName, double value, string unit = "Count",
-        Dictionary<string, string>? dimensions = null, CancellationToken cancellationToken = default)
-    {
-        _metrics.Add(new MetricRecord
-        {
-            MetricName = metricName,
-            Value = value,
-            Unit = unit,
-            Dimensions = dimensions,
-            Timestamp = DateTime.UtcNow
-        });
-
-        return Task.CompletedTask;
-    }
-
-    public IReadOnlyList<MetricRecord> GetMetrics()
-    {
-        return _metrics.AsReadOnly();
-    }
-
-    public void Clear()
-    {
-        _metrics.Clear();
-    }
-}
-
-public class MetricRecord
-{
-    public string? Operation { get; set; }
-    public bool Success { get; set; }
-    public RequestSource RequestSource { get; set; }
-    public int? ItemCount { get; set; }
-    public TimeSpan? Duration { get; set; }
-    public string? MetricName { get; set; }
-    public double Value { get; set; }
-    public string? Unit { get; set; }
-    public Dictionary<string, string>? Dimensions { get; set; }
-    public DateTime Timestamp { get; set; }
 }

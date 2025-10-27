@@ -6,6 +6,22 @@ namespace ItemMaster.Application;
 
 public class UnifiedItemMapper : IUnifiedItemMapper
 {
+    // Constants for validation rules
+    private const int RequiredHtsCodeLength = 10;
+    private const int RequiredCountryCodeLength = 2;
+    private const string DefaultCurrency = "USD";
+    private const string PriceTypeList = "list";
+    private const string CostTypeUnit = "unit";
+    private const string CostTypeLanded = "landed";
+    private const string CategorySourceAka = "aka";
+    private const string CategorySourceBrand = "brand";
+    private const string InventorySyncDefault = "ON";
+    private const string ImageSizeType = "original_size";
+    private const string ShopifyLinkSource = "Shopify US";
+    
+    // Date constants
+    private static readonly DateTimeOffset BarcodeLogicCutoffDate = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     private readonly ILogger<UnifiedItemMapper> _logger;
 
     public UnifiedItemMapper(ILogger<UnifiedItemMapper> logger)
@@ -36,15 +52,15 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         }
 
         // HTS code validation - must be 10 characters
-        if (string.IsNullOrWhiteSpace(item.Hts) || item.Hts.Length != 10)
+        if (string.IsNullOrWhiteSpace(item.Hts) || item.Hts.Length != RequiredHtsCodeLength)
         {
-            validationErrors.Add($"Invalid HTS code (must be 10 digits, got: '{item.Hts}')");
+            validationErrors.Add($"Invalid HTS code (must be {RequiredHtsCodeLength} digits, got: '{item.Hts}')");
         }
 
         // Country of Origin validation - must be 2 characters
-        if (string.IsNullOrWhiteSpace(item.CountryOfOrigin) || item.CountryOfOrigin.Length != 2)
+        if (string.IsNullOrWhiteSpace(item.CountryOfOrigin) || item.CountryOfOrigin.Length != RequiredCountryCodeLength)
         {
-            validationErrors.Add($"Invalid CountryOfOrigin (must be 2 chars, got: '{item.CountryOfOrigin}')");
+            validationErrors.Add($"Invalid CountryOfOrigin (must be {RequiredCountryCodeLength} chars, got: '{item.CountryOfOrigin}')");
         }
 
         // Color and Size validation

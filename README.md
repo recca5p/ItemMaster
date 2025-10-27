@@ -66,7 +66,7 @@ ItemMaster/
 - External service implementations:
     - `SnowflakeRepository` - RSA-authenticated data access
     - `SqsItemPublisher` - Message publishing with circuit breaker
-    - `MySqlItemMasterLogRepository` - Audit logging
+    - `MySqlItemMasterLogRepository` - Source data audit logging to `item_master_source_log` table
 - Resilience patterns (Polly)
 - EF Core configurations
 
@@ -401,6 +401,17 @@ When `ITEMMASTER_TEST_MODE=true`:
 | **Instance Class** | db.t4g.micro (ARM) | Cost-effective ARM-based |
 | **Storage**        | 20 GB SSD          | General Purpose storage  |
 | **Port**           | 3306               | MySQL default port       |
+
+**Database Schema:**
+
+The `item_master_source_log` table tracks every item processed:
+- **Sku**: Item identifier
+- **SourceModel**: Original data from Snowflake (JSON)
+- **ValidationStatus**: "valid" or "invalid"
+- **CommonModel**: Mapped unified item model (JSON, null if validation failed)
+- **Errors**: Validation error messages or warnings about skipped properties
+- **IsSentToSqs**: Boolean flag indicating successful SQS delivery
+- **CreatedAt**: Timestamp of processing
 
 ---
 

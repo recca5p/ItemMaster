@@ -10,7 +10,7 @@ public sealed class ItemMasterDbContextFactory : IDesignTimeDbContextFactory<MyS
     {
         var connStr = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING")
                       ??
-                      "Server=xxxx;Port=3306;Database=xxxx;Uid=admin;Pwd=xxx;TreatTinyAsBoolean=false;SslMode=None;";
+                      "Server=database-1.c7appipf23g8.ap-southeast-1.rds.amazonaws.com;Port=3306;Database=itemmaster;Uid=admin;Pwd=!A!wR[:g8cg$437F9MEE1z:?(pW-;TreatTinyAsBoolean=false;SslMode=None;";
         var optionsBuilder = new DbContextOptionsBuilder<MySqlDbContext>();
         ServerVersion version;
         try

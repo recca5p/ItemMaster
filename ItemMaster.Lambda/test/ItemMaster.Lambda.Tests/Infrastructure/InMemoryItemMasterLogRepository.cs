@@ -1,7 +1,7 @@
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 
-namespace ItemMaster.Infrastructure;
+namespace ItemMaster.Lambda.Tests.Infrastructure;
 
 public class InMemoryItemMasterLogRepository : IItemMasterLogRepository
 {
