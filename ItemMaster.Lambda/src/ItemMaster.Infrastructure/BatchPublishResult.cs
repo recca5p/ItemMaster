@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using Amazon.SQS.Model;
 
 namespace ItemMaster.Infrastructure;
 
+[ExcludeFromCodeCoverage]
 public class BatchPublishResult
 {
     public List<SendMessageBatchRequestEntry> SuccessfulMessages { get; set; } = new();

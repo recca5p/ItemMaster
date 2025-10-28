@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ItemMaster.Infrastructure;
 
+[ExcludeFromCodeCoverage]
 public class SnowflakeOptions
 {
     public string Database { get; set; } = string.Empty;

@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 namespace ItemMaster.Infrastructure.Ef;
 
+[ExcludeFromCodeCoverage]
 public sealed class ItemMasterDbContextFactory : IDesignTimeDbContextFactory<MySqlDbContext>
 {
     public MySqlDbContext CreateDbContext(string[] args)

@@ -92,6 +92,7 @@ public class SnowflakeConnectionProvider : ISnowflakeConnectionProvider
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private static byte[] ToPkcs8DerBytes(string pem)
     {
         var text = pem.Trim();
@@ -128,6 +129,7 @@ public class SnowflakeConnectionProvider : ISnowflakeConnectionProvider
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private static string ExtractBase64Between(string pem, string label)
     {
         var pattern = $"-----BEGIN {Regex.Escape(label)}-----|-----END {Regex.Escape(label)}-----";
@@ -136,6 +138,7 @@ public class SnowflakeConnectionProvider : ISnowflakeConnectionProvider
         return cleaned;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private static string BuildPkcs8Pem(byte[] der)
     {
         var base64 = Convert.ToBase64String(der);

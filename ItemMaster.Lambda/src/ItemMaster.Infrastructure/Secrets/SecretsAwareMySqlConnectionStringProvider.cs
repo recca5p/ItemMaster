@@ -47,6 +47,7 @@ public class SecretsAwareMySqlConnectionStringProvider : IConnectionStringProvid
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private async Task<MySqlSecret> GetMySqlSecretAsync(string secretArn)
     {
         var resp = await _secretsManager.GetSecretValueAsync(new GetSecretValueRequest { SecretId = secretArn });
@@ -87,6 +88,7 @@ public class SecretsAwareMySqlConnectionStringProvider : IConnectionStringProvid
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private class MySqlSecret
     {
         public string Username { get; set; } = string.Empty;

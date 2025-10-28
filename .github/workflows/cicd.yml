@@ -29,7 +29,27 @@ jobs:
         with: { dotnet-version: '8.x' }
       - run: dotnet restore
       - run: dotnet build --configuration Release --no-restore
-      - run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+      - name: Run tests with coverage
+        run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage" --results-directory ./coverage
+      
+      - name: Generate coverage report
+        if: always()
+        run: |
+          if [ -d ./coverage ]; then
+            echo "Coverage reports generated:"
+            ls -la ./coverage/**/
+          fi
+      
+      - name: Upload test results and coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            test-results.trx
+            coverage/
+          retention-days: 30
+          
 
       - name: Publish (linux-arm64)
         run: |
@@ -48,6 +68,9 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with: { name: lambda-package, path: . }
+        
+      - uses: actions/download-artifact@v4
+        with: { name: test-results, path: ./test-results }
 
       - name: Configure AWS creds
         uses: aws-actions/configure-aws-credentials@v4
@@ -173,13 +196,42 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - uses: actions/download-artifact@v4
+        with: { name: test-results, path: ./test-results }
+      
+      - name: Generate coverage summary
+        id: coverage
+        run: |
+          COVERAGE_XML=$(find ./test-results -name "coverage.cobertura.xml" | head -1)
+          
+          if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
+            # Extract coverage percentage from cobertura XML
+            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
+            PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
+            
+            echo "coverage=$PERCENTAGE" >> $GITHUB_OUTPUT
+            echo "Coverage: $PERCENTAGE%"
+          else
+            echo "coverage=N/A" >> $GITHUB_OUTPUT
+            echo "Coverage report not found"
+          fi
+      
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
           script: |
+            const coverage = '${{ steps.coverage.outputs.coverage }}';
+            const coverageValue = parseFloat(coverage);
+            const isNumeric = !isNaN(coverageValue);
+            const coverageBadge = !isNumeric ? '⚪' : coverageValue >= 90 ? '🟢' : coverageValue >= 75 ? '🟡' : coverageValue >= 50 ? '🟠' : '🔴';
+            
             const message = `## ✅ Build & Test Successful
             
             The Lambda package has been built and tested successfully for this PR.
+            
+            ${coverageBadge} **Code Coverage**: ${isNumeric ? coverage + '%' : coverage}
+            
+            📊 Coverage reports are available in the workflow artifacts.
             
             **Note**: Deployment is skipped for pull requests. Merge to \`main\` or create a tag \`v*.*.*\` to deploy.
             

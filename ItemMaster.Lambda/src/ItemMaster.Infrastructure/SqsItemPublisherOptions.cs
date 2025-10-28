@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ItemMaster.Infrastructure;
 
+[ExcludeFromCodeCoverage]
 public class SqsItemPublisherOptions
 {
     public string QueueUrl { get; set; } = string.Empty;

@@ -1,7 +1,10 @@
 using ItemMaster.Shared;
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace ItemMaster.Infrastructure.Observability;
 
+[ExcludeFromCodeCoverage]
 public class MetricRecord
 {
     public string? Operation { get; set; }

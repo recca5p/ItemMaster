@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ItemMaster.Infrastructure.Observability;
 
+[ExcludeFromCodeCoverage]
 public class TraceRecord
 {
     public string? Type { get; set; }
