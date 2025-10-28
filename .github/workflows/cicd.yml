@@ -37,7 +37,7 @@ jobs:
         run: |
           if [ -d ./coverage ]; then
             echo "Coverage reports generated:"
-            ls -la ./coverage/**/
+            find ./coverage -name "*.cobertura.xml" -type f
           fi
       
       - name: Install ReportGenerator
@@ -47,14 +47,19 @@ jobs:
       - name: Generate HTML coverage report
         if: always()
         run: |
-          REPORT_OUTPUT="./coverage-html"
-          reportgenerator \
-            -reports:"./coverage/**/coverage.cobertura.xml" \
-            -targetdir:"${REPORT_OUTPUT}" \
-            -reporttypes:"Html;Badges;JsonSummary" \
-            -classfilters:"-Microsoft.*;-System.*;-xunit.*" \
-            -verbosity:Warning
-          echo "Coverage HTML report generated in ${REPORT_OUTPUT}"
+          COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
+          if [ -n "$COVERAGE_XML" ]; then
+            REPORT_OUTPUT="./coverage-html"
+            reportgenerator \
+              -reports:"${COVERAGE_XML}" \
+              -targetdir:"${REPORT_OUTPUT}" \
+              -reporttypes:"Html;Badges;JsonSummary" \
+              -classfilters:"-Microsoft.*;-System.*;-xunit.*" \
+              -verbosity:Warning
+            echo "Coverage HTML report generated in ${REPORT_OUTPUT}"
+          else
+            echo "No coverage XML file found"
+          fi
       
       - name: Upload test results and coverage
         uses: actions/upload-artifact@v4
