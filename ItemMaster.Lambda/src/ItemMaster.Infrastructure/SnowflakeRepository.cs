@@ -114,6 +114,7 @@ public class SnowflakeRepository : ISnowflakeRepository
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private async Task<SnowflakeDbConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {
         var cs = await _connProvider.GetConnectionStringAsync();

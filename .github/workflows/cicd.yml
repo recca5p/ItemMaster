@@ -30,7 +30,7 @@ jobs:
       - run: dotnet restore
       - run: dotnet build --configuration Release --no-restore
       - name: Run tests with coverage
-        run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage" --results-directory ./coverage
+        run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage" --results-directory ./coverage --settings coverage.runsettings
       
       - name: Generate coverage report
         if: always()
@@ -40,14 +40,31 @@ jobs:
             ls -la ./coverage/**/
           fi
       
+      - name: Install ReportGenerator
+        if: always()
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+      
+      - name: Generate HTML coverage report
+        if: always()
+        run: |
+          REPORT_OUTPUT="./coverage-html"
+          reportgenerator \
+            -reports:"./coverage/**/coverage.cobertura.xml" \
+            -targetdir:"${REPORT_OUTPUT}" \
+            -reporttypes:"Html;Badges;JsonSummary" \
+            -classfilters:"-Microsoft.*;-System.*;-xunit.*" \
+            -verbosity:Warning
+          echo "Coverage HTML report generated in ${REPORT_OUTPUT}"
+      
       - name: Upload test results and coverage
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-and-coverage
           path: |
             test-results.trx
             coverage/
+            coverage-html/
           retention-days: 30
           
 
@@ -70,7 +87,7 @@ jobs:
         with: { name: lambda-package, path: . }
         
       - uses: actions/download-artifact@v4
-        with: { name: test-results, path: ./test-results }
+        with: { name: test-results-and-coverage, path: ./test-results }
 
       - name: Configure AWS creds
         uses: aws-actions/configure-aws-credentials@v4
@@ -197,7 +214,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/download-artifact@v4
-        with: { name: test-results, path: ./test-results }
+        with: { name: test-results-and-coverage, path: ./test-results }
       
       - name: Generate coverage summary
         id: coverage
