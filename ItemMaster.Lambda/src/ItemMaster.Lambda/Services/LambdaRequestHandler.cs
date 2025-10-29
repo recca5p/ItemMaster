@@ -57,10 +57,10 @@ public class LambdaRequestHandler : ILambdaRequestHandler
                 var logger = scope.ServiceProvider.GetRequiredService<ILogger<LambdaRequestHandler>>();
                 var responseService = scope.ServiceProvider.GetRequiredService<IResponseService>();
 
-                logger.LogError(ex, 
+                logger.LogError(ex,
                     "[ERROR] Unhandled exception in Lambda request handler. Error: {Error} | Type: {ExceptionType} | StackTrace: {StackTrace} | InnerException: {InnerException}",
                     ex.Message, ex.GetType().FullName, ex.StackTrace, ex.InnerException?.Message ?? "none");
-                
+
                 // Log full exception details including inner exceptions
                 var fullException = ex.ToString();
                 logger.LogError("[ERROR] Full exception details: {FullException}", fullException);
@@ -136,9 +136,9 @@ public class LambdaRequestHandler : ILambdaRequestHandler
                 requestSource, traceId);
 
             var processRequest = requestProcessingService.ParseRequest(input, requestSource, traceId);
-            logger.LogInformation("[EXECUTE] Request parsed successfully. SKUs count: {SkuCount}", 
+            logger.LogInformation("[EXECUTE] Request parsed successfully. SKUs count: {SkuCount}",
                 processRequest?.Skus?.Count ?? 0);
-            
+
             var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
             logger.LogInformation("[EXECUTE] Use case resolved successfully");
 
@@ -158,7 +158,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, 
+            logger.LogError(ex,
                 "[EXECUTE] Exception in ExecuteBusinessLogic. Error: {Error} | Type: {ExceptionType} | StackTrace: {StackTrace} | InnerException: {InnerException}",
                 ex.Message, ex.GetType().FullName, ex.StackTrace, ex.InnerException?.Message ?? "none");
             logger.LogError("[EXECUTE] Full exception: {FullException}", ex.ToString());

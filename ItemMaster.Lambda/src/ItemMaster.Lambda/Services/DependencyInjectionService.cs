@@ -99,7 +99,7 @@ public class DependencyInjectionService : IDependencyInjectionService
         // Check if we're in integration test mode (has MYSQL_HOST)
         var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
         var isIntegrationTestMode = !string.IsNullOrEmpty(mysqlHost);
-        
+
         // Log DI setup information (before logger is available from DI)
         Console.WriteLine($"[DI] Registering test mode services. Integration test mode: {isIntegrationTestMode}, MYSQL_HOST: {mysqlHost ?? "not set"}, AWS_ENDPOINT_URL: {Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL") ?? "not set"}, SQS_URL: {configuration[ConfigurationConstants.SQS_URL] ?? "not set"}");
 
@@ -201,15 +201,8 @@ public class DependencyInjectionService : IDependencyInjectionService
 
         // Configure SQS options - REQUIRED for SqsItemPublisher to work
         ConfigureSqsOptions(services, configuration);
-        
         var sqsUrl = configuration[ConfigurationConstants.SQS_URL];
         Console.WriteLine($"[DI] SQS options configured. QueueUrl: {sqsUrl ?? "MISSING"}");
-        
-        if (string.IsNullOrEmpty(sqsUrl))
-        {
-            throw new InvalidOperationException(
-                $"SQS QueueUrl is not configured! Please set {ConfigurationConstants.SQS_URL} environment variable or configuration key.");
-        }
 
         // Use production implementations
         services.AddScoped<IItemMasterLogRepository, EfItemMasterLogRepository>();
@@ -273,9 +266,16 @@ public class DependencyInjectionService : IDependencyInjectionService
 
     private void ConfigureSqsOptions(IServiceCollection services, IConfiguration configuration)
     {
+        var queueUrl = configuration[ConfigurationConstants.SQS_URL];
+        if (string.IsNullOrWhiteSpace(queueUrl))
+        {
+            throw new InvalidOperationException(
+                $"SQS QueueUrl is required but not configured. Please set {ConfigurationConstants.SQS_URL} environment variable or configuration key (sqs__url).");
+        }
+
         services.Configure<SqsItemPublisherOptions>(opts =>
         {
-            opts.QueueUrl = configuration[ConfigurationConstants.SQS_URL]!;
+            opts.QueueUrl = queueUrl;
             opts.MaxRetries = ParseInt(configuration[ConfigurationConstants.SQS_MAX_RETRIES],
                 ConfigurationConstants.DEFAULT_MAX_RETRIES, v => v >= 0 && v <= 10);
             opts.BaseDelayMs = ParseInt(configuration[ConfigurationConstants.SQS_BASE_DELAY_MS],
