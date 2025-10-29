@@ -65,22 +65,19 @@ jobs:
         if: always()
         run: dotnet tool install -g dotnet-reportgenerator-globaltool
       
-      - name: Generate HTML coverage report
+      - name: Generate HTML coverage report and merge
         if: always()
         run: |
-          COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
-          if [ -n "$COVERAGE_XML" ]; then
-            REPORT_OUTPUT="./coverage-html"
-            reportgenerator \
-              -reports:"${COVERAGE_XML}" \
-              -targetdir:"${REPORT_OUTPUT}" \
-              -reporttypes:"Html;Badges;JsonSummary" \
-              -classfilters:"-Microsoft.*;-System.*;-xunit.*" \
-              -verbosity:Warning
-            echo "Coverage HTML report generated in ${REPORT_OUTPUT}"
-          else
-            echo "No coverage XML file found"
-          fi
+          REPORT_OUTPUT="./coverage-html"
+          find ./coverage -name "*.cobertura.xml" -type f
+          
+          reportgenerator \
+            -reports:"./coverage/*/coverage.cobertura.xml" \
+            -targetdir:"${REPORT_OUTPUT}" \
+            -reporttypes:"Html;Badges;JsonSummary;Cobertura" \
+            -classfilters:"-Microsoft.*;-System.*;-xunit.*" \
+            -verbosity:Warning
+          echo "Coverage HTML report generated in ${REPORT_OUTPUT}"
       
       - name: Upload test results and coverage
         uses: actions/upload-artifact@v4
@@ -107,13 +104,12 @@ jobs:
       - name: Check coverage threshold
         if: always()
         run: |
-          echo "Looking for coverage XML files..."
-          find ./coverage -name "*.cobertura.xml" -type f
+          echo "Looking for merged coverage XML from reportgenerator..."
           
-          COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
-          if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
-            echo "Found coverage XML: $COVERAGE_XML"
-            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
+          MERGED_XML=$(find ./coverage-html -name "Cobertura.xml" -type f | head -1)
+          if [ -n "$MERGED_XML" ]; then
+            echo "Using merged coverage XML: $MERGED_XML"
+            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$MERGED_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
             PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
             echo "Current coverage: $PERCENTAGE%"
             echo "Required coverage: $COVERAGE_THRESHOLD%"
@@ -125,9 +121,9 @@ jobs:
               echo "SUCCESS: Coverage $PERCENTAGE% meets threshold $COVERAGE_THRESHOLD%"
             fi
           else
-            echo "ERROR: No coverage XML found"
-            echo "Contents of coverage directory:"
-            ls -la ./coverage/ || echo "Coverage directory not found"
+            echo "ERROR: Merged coverage XML not found"
+            echo "Contents of coverage-html directory:"
+            ls -la ./coverage-html/ || echo "Coverage-html directory not found"
             exit 1
           fi
       
@@ -137,9 +133,9 @@ jobs:
           echo "## Build & Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
-          if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
-            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
+          MERGED_XML=$(find ./coverage-html -name "Cobertura.xml" -type f | head -1)
+          if [ -n "$MERGED_XML" ] && [ -f "$MERGED_XML" ]; then
+            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$MERGED_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
             PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
             
             COVERAGE_BADGE=$([ -n "$PERCENTAGE" ] && (( $(echo "$PERCENTAGE >= 90" | bc -l) )) && echo "" || \
