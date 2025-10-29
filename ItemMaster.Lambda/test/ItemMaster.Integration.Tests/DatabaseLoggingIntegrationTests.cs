@@ -106,7 +106,7 @@ public class DatabaseLoggingIntegrationTests : IntegrationTestBase
             .FirstOrDefaultAsync(l => l.Sku == sku);
 
         log.Should().NotBeNull();
-        
+
         if (log!.SourceModel != null)
         {
             var sourceModel = JsonDocument.Parse(log.SourceModel);

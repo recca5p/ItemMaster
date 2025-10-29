@@ -139,8 +139,7 @@ jobs:
             --configuration Release \
             --no-build \
             --logger "trx;LogFileName=integration-results.trx" \
-            --filter Category=Integration \
-            -- "NUnit.DefaultTestNamePattern={m}"
+            --filter Category=Integration
       
       - name: Upload integration test results
         if: always()

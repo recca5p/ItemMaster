@@ -63,7 +63,7 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
 
         var firstMessage = messages[0];
         var body = JsonDocument.Parse(firstMessage.Body);
-        
+
         body.RootElement.TryGetProperty("Sku", out var skuElement);
         if (skuElement.ValueKind != JsonValueKind.Undefined)
         {
@@ -76,9 +76,9 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
     public async Task SqsPublishing_BatchProcessing_ShouldSendMultipleMessages()
     {
         // Arrange
-        var request = new ProcessSkusRequest 
-        { 
-            Skus = new List<string> { "BATCH-001", "BATCH-002", "BATCH-003" } 
+        var request = new ProcessSkusRequest
+        {
+            Skus = new List<string> { "BATCH-001", "BATCH-002", "BATCH-003" }
         };
         var apiGatewayRequest = CreateRequest(request);
 
@@ -111,7 +111,7 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
         await Task.Delay(1000);
 
         var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!);
-        
+
         if (messages.Count == 0)
         {
             messages.Should().BeEmpty();
@@ -123,9 +123,9 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
     public async Task SqsPublishing_EachMessage_ShouldHaveUniqueId()
     {
         // Arrange
-        var request = new ProcessSkusRequest 
-        { 
-            Skus = new List<string> { "UNIQUE-001", "UNIQUE-002" } 
+        var request = new ProcessSkusRequest
+        {
+            Skus = new List<string> { "UNIQUE-001", "UNIQUE-002" }
         };
         var apiGatewayRequest = CreateRequest(request);
 
@@ -138,7 +138,7 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
         await Task.Delay(2000);
 
         var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!, 10);
-        
+
         if (messages.Count >= 2)
         {
             var ids = messages.Select(m => m.MessageId).ToList();
