@@ -2,6 +2,7 @@ using Amazon.CloudWatch;
 using Amazon.CloudWatch.Model;
 using Amazon.Runtime;
 using Amazon.SecretsManager;
+using Amazon.SecretsManager.Model;
 using Amazon.SQS;
 using Amazon.SQS.Model;
 using ItemMaster.Application;
@@ -116,6 +117,16 @@ public class DependencyInjectionService : IDependencyInjectionService
             var awsEndpoint = Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL");
             if (!string.IsNullOrEmpty(awsEndpoint))
             {
+                services.AddSingleton<IAmazonSecretsManager>(sp =>
+                {
+                    var config = new AmazonSecretsManagerConfig
+                    {
+                        ServiceURL = awsEndpoint,
+                        UseHttp = true
+                    };
+                    return new AmazonSecretsManagerClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
+                });
+
                 services.AddSingleton<IAmazonSQS>(sp =>
                 {
                     var config = new AmazonSQSConfig
@@ -125,6 +136,7 @@ public class DependencyInjectionService : IDependencyInjectionService
                     };
                     return new AmazonSQSClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
                 });
+
                 services.AddSingleton<IAmazonCloudWatch>(sp =>
                 {
                     var config = new AmazonCloudWatchConfig
@@ -135,17 +147,44 @@ public class DependencyInjectionService : IDependencyInjectionService
                     return new AmazonCloudWatchClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
                 });
             }
+            else
+            {
+                // Add a mock secrets manager if no endpoint
+                services.AddSingleton<IAmazonSecretsManager, AmazonSecretsManagerClient>();
+            }
         }
         else
         {
             // Unit test mode - In-memory database
             services.AddDbContext<MySqlDbContext>(o => o.UseInMemoryDatabase(ConfigurationConstants.IN_MEMORY_DB_NAME));
+            // Mock services for unit tests
+            services.AddSingleton<IAmazonSecretsManager, AmazonSecretsManagerClient>();
         }
+
+        // Register connection providers and repositories
+        if (isIntegrationTestMode)
+        {
+            // Integration test: Use mock Snowflake connection provider
+            services.AddScoped<ISnowflakeConnectionProvider>(sp =>
+            {
+                var logger = sp.GetRequiredService<ILogger<SnowflakeConnectionProvider>>();
+                var config = sp.GetRequiredService<IConfiguration>();
+                return new MockSnowflakeConnectionProvider(logger, config);
+            });
+        }
+        else
+        {
+            // Unit test: Use production provider (but won't actually connect)
+            services.AddScoped<ISnowflakeConnectionProvider, SnowflakeConnectionProvider>();
+        }
+
+        services.AddScoped<ISnowflakeItemQueryBuilder, SnowflakeItemQueryBuilder>();
+        services.AddScoped<SnowflakeRepository>();
+        services.AddScoped<ISnowflakeRepository>(sp => sp.GetRequiredService<SnowflakeRepository>());
 
         // Use production implementations
         services.AddScoped<IItemMasterLogRepository, EfItemMasterLogRepository>();
         services.AddScoped<IItemPublisher, SqsItemPublisher>();
-        services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();
         services.AddScoped<IMetricsService, CloudWatchMetricsService>();
         services.AddScoped<ITracingService, XRayTracingService>();
         services.AddScoped<IObservabilityService, ObservabilityService>();
