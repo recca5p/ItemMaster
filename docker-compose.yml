@@ -39,14 +39,15 @@ services:
       retries: 10
 
   localstack:
-    image: localstack/localstack:2.3
+    image: localstack/localstack:latest
     container_name: itemmaster-localstack
     restart: unless-stopped
     environment:
-      SERVICES: sqs,logs
-      AWS_DEFAULT_REGION: us-east-1
+      SERVICES: sqs,secretsmanager,cloudwatch
+      AWS_DEFAULT_REGION: ap-southeast-1
       DEBUG: "1"
       LS_LOG: warning
+      DOCKER_HOST: unix:///var/run/docker.sock
     ports:
       - "4566:4566"
       - "4571:4571"
@@ -54,7 +55,7 @@ services:
       - "./.localstack:/var/lib/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
     healthcheck:
-      test: [ "CMD-SHELL", "awslocal sqs list-queues || exit 1" ]
+      test: [ "CMD-SHELL", "curl -f http://localhost:4566/_localstack/health || exit 1" ]
       interval: 15s
       timeout: 5s
       retries: 15
@@ -63,10 +64,11 @@ services:
     image: amazon/aws-cli:2.15.30
     container_name: itemmaster-localstack-init
     depends_on:
-      - localstack
+      localstack:
+        condition: service_healthy
     environment:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
-      AWS_DEFAULT_REGION: us-east-1
+      AWS_DEFAULT_REGION: ap-southeast-1
     entrypoint: /bin/sh
-    command: -c "set -e; echo 'Waiting for LocalStack...'; until curl -s http://localstack:4566/health | grep 'sqs' >/dev/null; do sleep 3; done; echo 'Creating SQS queue itemmaster-queue'; aws --endpoint-url=http://localstack:4566 sqs create-queue --queue-name itemmaster-queue; echo 'Listing queues'; aws --endpoint-url=http://localstack:4566 sqs list-queues; sleep 2;"
+    command: -c "set -e; echo 'Waiting for LocalStack...'; until curl -s http://localstack:4566/_localstack/health | grep -q 'sqs.*available'; do sleep 3; done; echo 'Creating SQS queue im-dev-item-master-queue'; aws --endpoint-url=http://localstack:4566 sqs create-queue --queue-name im-dev-item-master-queue --region ap-southeast-1 || echo 'Queue might already exist'; echo 'Creating MySQL secret'; aws --endpoint-url=http://localstack:4566 secretsmanager create-secret --name test/mysql-secret --secret-string '{\"username\":\"im_user\",\"password\":\"im_pass\",\"host\":\"mysql\",\"port\":3306,\"database\":\"item_master\"}' --region ap-southeast-1 || echo 'Secret might already exist'; echo 'Setup complete';"

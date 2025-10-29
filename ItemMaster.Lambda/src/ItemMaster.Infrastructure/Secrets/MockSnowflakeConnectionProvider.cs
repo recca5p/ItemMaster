@@ -19,7 +19,7 @@ public class MockSnowflakeConnectionProvider : SnowflakeConnectionProvider
     _mockConfiguration = configuration;
   }
 
-  public new Task<string> GetConnectionStringAsync()
+  public override Task<string> GetConnectionStringAsync()
   {
     // Return a mock Snowflake connection string for integration tests
     // This won't actually connect, but it satisfies the dependency

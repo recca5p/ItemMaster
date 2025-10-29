@@ -180,7 +180,16 @@ public class DependencyInjectionService : IDependencyInjectionService
 
         services.AddScoped<ISnowflakeConnectionProvider>(sp => sp.GetRequiredService<SnowflakeConnectionProvider>());
         services.AddScoped<ISnowflakeItemQueryBuilder, SnowflakeItemQueryBuilder>();
-        services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();
+
+        if (isIntegrationTestMode)
+        {
+            // Integration test: Use mock repository that returns test data without connecting to Snowflake
+            services.AddScoped<ISnowflakeRepository, MockSnowflakeRepository>();
+        }
+        else
+        {
+            services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();
+        }
 
         // Use production implementations
         services.AddScoped<IItemMasterLogRepository, EfItemMasterLogRepository>();

@@ -25,7 +25,7 @@ public class SnowflakeConnectionProvider : ISnowflakeConnectionProvider
         _logger = logger;
     }
 
-    public async Task<string> GetConnectionStringAsync()
+    public virtual async Task<string> GetConnectionStringAsync()
     {
         try
         {
