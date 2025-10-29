@@ -109,11 +109,11 @@ public class EndToEndIntegrationTests : IntegrationTestBase
 
   private static object CreateEventBridgeRequest()
   {
-    return new
+    return new Dictionary<string, object>
     {
-      source = "aws.events",
-      "detail-type" = "Scheduled Event",
-      detail = new { message = "Process latest items" }
+      ["source"] = "aws.events",
+      ["detail-type"] = "Scheduled Event",
+      ["detail"] = new Dictionary<string, object> { ["message"] = "Process latest items" }
     };
   }
 }

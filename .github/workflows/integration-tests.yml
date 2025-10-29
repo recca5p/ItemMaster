@@ -2,13 +2,21 @@ name: Integration Tests
 
 on:
   pull_request:
-    branches: [master]
-  workflow_dispatch:
+    branches:
+      - master
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
+  MYSQL_SECRET_ID: ${{ secrets.RDS_SECRET_ID }}
 
 jobs:
-  integration-test:
+  integration-tests:
     runs-on: ubuntu-latest
-    
     services:
       mysql:
         image: mysql:8.0
@@ -24,89 +32,85 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=3
+      
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: sqs,secretsmanager
+          DEBUG: 1
+          DOCKER_HOST: unix:///var/run/docker.sock
+        ports:
+          - 4566:4566
+        options: >-
+          --health-cmd="curl -f http://localhost:4566/_localstack/health"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
       
-      - name: Start LocalStack
-        run: |
-          docker run -d --name localstack \
-            -p 4566:4566 -p 4571:4571 \
-            -e SERVICES=sqs,secretsmanager,ssm \
-            -e AWS_DEFAULT_REGION=ap-southeast-1 \
-            -e DEBUG=1 \
-            localstack/localstack:latest
+      - name: Configure AWS credentials for LocalStack
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: test
+          aws-secret-access-key: test
+          aws-region: ${{ env.AWS_REGION }}
+        env:
+          AWS_ENDPOINT_URL: http://localhost:4566
       
-      - name: Wait for LocalStack
+      - name: Create SQS queue
         run: |
-          until curl -s http://localhost:4566/_localstack/health | grep -q '"sqs": "available"'; do
-            echo "Waiting for LocalStack...";
-            sleep 2;
-          done;
-          echo "LocalStack is ready"
+          aws sqs create-queue \
+            --queue-name im-dev-item-master-queue \
+            --endpoint-url http://localhost:4566 \
+            --region $AWS_REGION
       
-      - name: Create SQS Queue
+      - name: Create secrets in LocalStack
         run: |
-          aws configure set aws_access_key_id test
-          aws configure set aws_secret_access_key test
-          aws configure set region ap-southeast-1
-          
-          aws --endpoint-url=http://localhost:4566 sqs create-queue \
-            --queue-name itemmaster-test-queue || true
+          aws secretsmanager create-secret \
+            --name $MYSQL_SECRET_ID \
+            --secret-string '{"username":"im_user","password":"im_pass","host":"mysql","port":3306,"database":"item_master"}' \
+            --endpoint-url http://localhost:4566 \
+            --region $AWS_REGION
       
-      - name: List SQS Queues
+      - name: Restore dependencies
+        run: dotnet restore
+      
+      - name: Build integration tests
+        run: dotnet build ItemMaster.Lambda/test/ItemMaster.Integration.Tests/ItemMaster.Integration.Tests.csproj --configuration Release
+      
+      - name: Apply database migrations
         run: |
-          aws --endpoint-url=http://localhost:4566 sqs list-queues
-      
-      - name: Setup Mock Secrets
-        run: |
-          aws --endpoint-url=http://localhost:4566 secretsmanager create-secret \
-            --name ssm-rsa-path \
-            --secret-string '{"private_key":"MIIEvQ..."}' || true
-      
-      - name: Build Integration Tests
-        run: dotnet build ItemMaster.Lambda/test/ItemMaster.Integration.Tests/ItemMaster.Integration.Tests.csproj -c Release
-      
-      - name: Apply Database Migrations
-        run: |
-          connectionString="Server=localhost;Database=item_master;User=im_user;Password=im_pass;CharSet=utf8mb4;"
+          cd ItemMaster.Lambda/src/ItemMaster.Infrastructure
           dotnet ef database update \
-            --project ItemMaster.Lambda/src/ItemMaster.Infrastructure \
-            --startup-project ItemMaster.Lambda/src/ItemMaster.Lambda \
-            --connection "$connectionString" \
-            --no-build || echo "Migrations may already be applied"
+            --startup-project ../ItemMaster.Lambda \
+            --connection "Server=localhost;Database=item_master;User=im_user;Password=im_pass;"
       
-      - name: Run Integration Tests
+      - name: Run integration tests
         run: |
           dotnet test ItemMaster.Lambda/test/ItemMaster.Integration.Tests/ItemMaster.Integration.Tests.csproj \
-            --filter "Category=Integration" \
             --configuration Release \
             --no-build \
             --logger "trx;LogFileName=integration-results.trx" \
-            --verbosity normal
-        env:
-          AWS_ENDPOINT_URL: http://localhost:4566
-          AWS_REGION: ap-southeast-1
-          MYSQL_HOST: localhost
-          MYSQL_DATABASE: item_master
-          MYSQL_USER: im_user
-          MYSQL_PASSWORD: im_pass
-          SSM_RSA_PATH: ssm-rsa-path
+            --filter Category=Integration
       
-      - name: Upload Integration Test Results
+      - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: integration-test-results
-          path: ItemMaster.Lambda/test/ItemMaster.Integration.Tests/TestResults/integration-results.trx
+          path: integration-results.trx
           retention-days: 30
       
-      - name: Cleanup LocalStack
+      - name: Generate summary
         if: always()
-        run: docker rm -f localstack
-
+        run: |
+          echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Integration tests completed" >> $GITHUB_STEP_SUMMARY
+          echo "Test results uploaded as artifacts" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,198 @@
+name: Build & Test
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
+  PROJECT_PATH: ItemMaster.Lambda
+  OUTPUT_DIR: out
+  COVERAGE_THRESHOLD: 80
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+      
+      - name: Restore dependencies
+        run: dotnet restore
+      
+      - name: Build solution
+        run: dotnet build --configuration Release --no-restore
+      
+      - name: Run tests with coverage
+        run: |
+          dotnet test --configuration Release --no-build \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage \
+            --settings coverage.runsettings
+      
+      - name: Find coverage XML files
+        if: always()
+        run: |
+          if [ -d ./coverage ]; then
+            echo "Coverage reports generated:"
+            find ./coverage -name "*.cobertura.xml" -type f
+          fi
+      
+      - name: Install ReportGenerator
+        if: always()
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+      
+      - name: Generate HTML coverage report
+        if: always()
+        run: |
+          COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
+          if [ -n "$COVERAGE_XML" ]; then
+            REPORT_OUTPUT="./coverage-html"
+            reportgenerator \
+              -reports:"${COVERAGE_XML}" \
+              -targetdir:"${REPORT_OUTPUT}" \
+              -reporttypes:"Html;Badges;JsonSummary" \
+              -classfilters:"-Microsoft.*;-System.*;-xunit.*" \
+              -verbosity:Warning
+            echo "Coverage HTML report generated in ${REPORT_OUTPUT}"
+          else
+            echo "No coverage XML file found"
+          fi
+      
+      - name: Upload test results and coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-and-coverage
+          path: |
+            test-results.trx
+            coverage/
+            coverage-html/
+          retention-days: 30
+      
+      - name: Publish Lambda package (linux-arm64)
+        run: |
+          dotnet publish -c Release -r linux-arm64 --self-contained false -o $OUTPUT_DIR ./ItemMaster.Lambda/src/ItemMaster.Lambda
+          cd $OUTPUT_DIR && zip -r ../function.zip . && cd -
+      
+      - name: Upload Lambda package
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package
+          path: function.zip
+      
+      - name: Check coverage threshold
+        if: always()
+        run: |
+          COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
+          if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
+            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
+            PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
+            echo "Current coverage: $PERCENTAGE%"
+            echo "Required coverage: $COVERAGE_THRESHOLD%"
+            
+            if (( $(echo "$PERCENTAGE < $COVERAGE_THRESHOLD" | bc -l) )); then
+              echo "Coverage $PERCENTAGE% is below threshold $COVERAGE_THRESHOLD%"
+              exit 1
+            else
+              echo "Coverage $PERCENTAGE% meets threshold $COVERAGE_THRESHOLD%"
+            fi
+          else
+            echo "No coverage XML found"
+            exit 1
+          fi
+      
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## Build & Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
+          if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
+            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
+            PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
+            
+            COVERAGE_BADGE=$([ -n "$PERCENTAGE" ] && (( $(echo "$PERCENTAGE >= 90" | bc -l) )) && echo "" || \
+                            [ -n "$PERCENTAGE" ] && (( $(echo "$PERCENTAGE >= 75" | bc -l) )) && echo "" || \
+                            [ -n "$PERCENTAGE" ] && (( $(echo "$PERCENTAGE >= 50" | bc -l) )) && echo "" || "")
+            
+            echo "${COVERAGE_BADGE} **Code Coverage**: $PERCENTAGE%" >> $GITHUB_STEP_SUMMARY
+            echo "Threshold: $COVERAGE_THRESHOLD%" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "- Test results" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage reports" >> $GITHUB_STEP_SUMMARY
+          echo "- Lambda package" >> $GITHUB_STEP_SUMMARY
+  
+  pr-comment:
+    needs: build-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-results-and-coverage
+          path: ./test-results
+      
+      - name: Generate coverage summary
+        id: coverage
+        run: |
+          COVERAGE_XML=$(find ./test-results -name "coverage.cobertura.xml" | head -1)
+          
+          if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
+            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
+            PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
+            
+            echo "coverage=$PERCENTAGE" >> $GITHUB_OUTPUT
+            echo "Coverage: $PERCENTAGE%"
+          else
+            echo "coverage=N/A" >> $GITHUB_OUTPUT
+            echo "Coverage report not found"
+          fi
+      
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const coverage = '${{ steps.coverage.outputs.coverage }}';
+            const coverageValue = parseFloat(coverage);
+            const isNumeric = !isNaN(coverageValue);
+            const coverageBadge = !isNumeric ? '' : coverageValue >= 90 ? '[90%+]' : coverageValue >= 75 ? '[75-89%]' : coverageValue >= 50 ? '[50-74%]' : '[<50%]';
+            
+            const message = `## Build & Test Successful
+            
+            The Lambda package has been built and tested successfully for this PR.
+            
+            ${coverageBadge} **Code Coverage**: ${isNumeric ? coverage + '%' : coverage}
+            
+            Coverage reports are available in the workflow artifacts.
+            
+            **Note**: Integration tests and deployment are required to pass before merging.
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+

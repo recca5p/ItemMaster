@@ -20,6 +20,7 @@
         <ProjectReference Include="..\..\src\ItemMaster.Application\ItemMaster.Application.csproj"/>
         <ProjectReference Include="..\..\src\ItemMaster.Infrastructure\ItemMaster.Infrastructure.csproj"/>
         <ProjectReference Include="..\..\src\ItemMaster.Contracts\ItemMaster.Contracts.csproj"/>
+        <ProjectReference Include="..\..\src\ItemMaster.Shared\ItemMaster.Shared.csproj"/>
     </ItemGroup>
 </Project>
 

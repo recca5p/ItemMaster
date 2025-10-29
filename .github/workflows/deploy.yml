@@ -1,0 +1,217 @@
+name: Deploy
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
+  PROJECT_PATH: ItemMaster.Lambda
+  OUTPUT_DIR: out
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check build-test status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: workflows } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-test.yml',
+              status: 'success',
+              per_page: 1
+            });
+            
+            if (workflows.workflow_runs.length === 0) {
+              core.setFailed('No successful build-test workflow found');
+              return;
+            }
+            
+            const latestRun = workflows.workflow_runs[0];
+            console.log(`Found successful build-test run: ${latestRun.html_url}`);
+      
+      - name: Check integration-tests status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: workflows } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'integration-tests.yml',
+              status: 'success',
+              per_page: 1
+            });
+            
+            if (workflows.workflow_runs.length === 0) {
+              core.setFailed('No successful integration-tests workflow found');
+              return;
+            }
+            
+            const latestRun = workflows.workflow_runs[0];
+            console.log(`Found successful integration-tests run: ${latestRun.html_url}`)
+
+  deploy:
+    needs: check-dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/download-artifact@v4
+        with:
+          name: lambda-package
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build-test.yml
+          allow-failures: false
+      
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-results-and-coverage
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build-test.yml
+          allow-failures: false
+      
+      - name: Get previous Lambda version
+        id: previous-version
+        run: |
+          PREVIOUS_VERSION=$(aws lambda get-function-configuration \
+            --function-name $LAMBDA_FUNCTION_NAME \
+            --region $AWS_REGION \
+            --query 'Version' \
+            --output text 2>/dev/null || echo "$LATEST")
+          
+          echo "previous=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          echo "Previous Lambda version: $PREVIOUS_VERSION"
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Determine deployment version
+        id: deploy-version
+        run: |
+          VERSION="manual-$(date +%Y%m%d-%H%M%S)"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Deployment version: $VERSION"
+      
+      - name: Deploy Lambda function
+        id: deploy
+        run: |
+          echo "Deploying Lambda function..."
+          
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --zip-file fileb://function.zip \
+            --publish \
+            --region $AWS_REGION
+          
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --region $AWS_REGION
+          
+          FUNCTION_VERSION=$(aws lambda list-versions-by-function \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --query 'Versions[-1].Version' \
+            --output text \
+            --region $AWS_REGION)
+          
+          echo "version=$FUNCTION_VERSION" >> $GITHUB_OUTPUT
+          echo "Lambda deployed successfully (Version: $FUNCTION_VERSION)"
+      
+      - name: Health check
+        id: health-check
+        run: |
+          echo "Performing health check on deployed Lambda..."
+          
+          echo '{}' > /tmp/health-payload.json
+          
+          INVOKE_RESULT=$(aws lambda invoke \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --payload fileb:///tmp/health-payload.json \
+            --cli-binary-format raw-in-base64-out \
+            /tmp/health-response.json 2>&1)
+          
+          if [ -f /tmp/health-response.json ]; then
+            cat /tmp/health-response.json
+            
+            STATUS_CODE=$(cat /tmp/health-response.json | jq -r '.statusCode // empty' 2>/dev/null || echo "")
+            
+            if [ "$STATUS_CODE" = "200" ]; then
+              echo "Health check passed"
+              echo "result=success" >> $GITHUB_OUTPUT
+            else
+              echo "Health check failed (Status: $STATUS_CODE)"
+              echo "result=failed" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          else
+            echo "Health check failed - no response"
+            echo "result=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+      
+      - name: Rollback on failure
+        if: steps.health-check.outputs.result == 'failed'
+        run: |
+          echo "Rolling back to previous version..."
+          
+          PREVIOUS_VERSION="${{ steps.previous-version.outputs.previous }}"
+          
+          if [ "$PREVIOUS_VERSION" != "LATEST" ] && [ "$PREVIOUS_VERSION" != "" ]; then
+            echo "Rolling back to version: $PREVIOUS_VERSION"
+            
+            aws lambda update-function-configuration \
+              --function-name "$LAMBDA_FUNCTION_NAME" \
+              --description "Rolled back to version $PREVIOUS_VERSION due to failed health check" \
+              --region $AWS_REGION
+            
+            echo "Rollback completed"
+          else
+            echo "Cannot rollback - no previous version found"
+          fi
+      
+      - name: Show Lambda logs
+        if: always()
+        run: |
+          echo "Recent Lambda logs:"
+          aws logs tail "/aws/lambda/${LAMBDA_FUNCTION_NAME}" \
+            --since 5m \
+            --format short \
+            --region $AWS_REGION || true
+      
+      - name: Create deployment summary
+        if: always()
+        run: |
+          HEALTH_RESULT="${{ steps.health-check.outputs.result }}"
+          DEPLOY_VERSION="${{ steps.deploy.outputs.version }}"
+          
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$HEALTH_RESULT" = "success" ]; then
+            echo "**Status**: Deployment successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status**: Deployment failed - rolled back" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Function**: \`$LAMBDA_FUNCTION_NAME\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: \`$AWS_REGION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: \`$DEPLOY_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: Manual" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$HEALTH_RESULT" = "failed" ]; then
+            echo "**Rollback**: Previous version restored" >> $GITHUB_STEP_SUMMARY
+          fi
+
