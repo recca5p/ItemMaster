@@ -5,31 +5,32 @@ using Microsoft.Extensions.Logging;
 namespace ItemMaster.Infrastructure.Secrets;
 
 [ExcludeFromCodeCoverage]
-public class MockSnowflakeConnectionProvider : ISnowflakeConnectionProvider
+public class MockSnowflakeConnectionProvider : SnowflakeConnectionProvider
 {
-  private readonly ILogger<SnowflakeConnectionProvider> _logger;
-  private readonly IConfiguration _configuration;
+  private readonly ILogger<SnowflakeConnectionProvider> _mockLogger;
+  private readonly IConfiguration _mockConfiguration;
 
   public MockSnowflakeConnectionProvider(
       ILogger<SnowflakeConnectionProvider> logger,
       IConfiguration configuration)
+      : base(new Amazon.SecretsManager.AmazonSecretsManagerClient(), configuration, logger)
   {
-    _logger = logger;
-    _configuration = configuration;
+    _mockLogger = logger;
+    _mockConfiguration = configuration;
   }
 
-  public Task<string> GetConnectionStringAsync()
+  public new Task<string> GetConnectionStringAsync()
   {
     // Return a mock Snowflake connection string for integration tests
     // This won't actually connect, but it satisfies the dependency
 
-    var account = _configuration["snowflake:account"] ?? "TEST_ACCOUNT";
-    var user = _configuration["snowflake:user"] ?? "TEST_USER";
-    var role = _configuration["snowflake:role"] ?? "TEST_ROLE";
+    var account = _mockConfiguration["snowflake:account"] ?? "TEST_ACCOUNT";
+    var user = _mockConfiguration["snowflake:user"] ?? "TEST_USER";
+    var role = _mockConfiguration["snowflake:role"] ?? "TEST_ROLE";
 
     var connectionString = $"account={account};user={user};authenticator=SNOWFLAKE_JWT;role={role};";
 
-    _logger.LogInformation(
+    _mockLogger.LogInformation(
         "Mock Snowflake connection string generated: account={Account}, user={User}, role={Role}",
         account, user, role);
 

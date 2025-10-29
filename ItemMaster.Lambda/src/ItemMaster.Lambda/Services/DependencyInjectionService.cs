@@ -165,7 +165,7 @@ public class DependencyInjectionService : IDependencyInjectionService
         if (isIntegrationTestMode)
         {
             // Integration test: Use mock Snowflake connection provider
-            services.AddScoped<ISnowflakeConnectionProvider>(sp =>
+            services.AddScoped<SnowflakeConnectionProvider, MockSnowflakeConnectionProvider>(sp =>
             {
                 var logger = sp.GetRequiredService<ILogger<SnowflakeConnectionProvider>>();
                 var config = sp.GetRequiredService<IConfiguration>();
@@ -175,12 +175,12 @@ public class DependencyInjectionService : IDependencyInjectionService
         else
         {
             // Unit test: Use production provider (but won't actually connect)
-            services.AddScoped<ISnowflakeConnectionProvider, SnowflakeConnectionProvider>();
+            services.AddScoped<SnowflakeConnectionProvider>();
         }
 
+        services.AddScoped<ISnowflakeConnectionProvider>(sp => sp.GetRequiredService<SnowflakeConnectionProvider>());
         services.AddScoped<ISnowflakeItemQueryBuilder, SnowflakeItemQueryBuilder>();
-        services.AddScoped<SnowflakeRepository>();
-        services.AddScoped<ISnowflakeRepository>(sp => sp.GetRequiredService<SnowflakeRepository>());
+        services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();
 
         // Use production implementations
         services.AddScoped<IItemMasterLogRepository, EfItemMasterLogRepository>();
