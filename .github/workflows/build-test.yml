@@ -36,19 +36,29 @@ jobs:
       
       - name: Run tests with coverage
         run: |
-          dotnet test --configuration Release --no-build \
+          dotnet test --configuration Release \
             --logger "trx;LogFileName=test-results.trx" \
             --collect:"XPlat Code Coverage" \
             --results-directory ./coverage \
             --settings coverage.runsettings \
-            --filter "Category!=Integration"
+            --filter "Category!=Integration" \
+            --verbosity normal
       
       - name: Find coverage XML files
         if: always()
         run: |
+          echo "Looking for coverage files..."
           if [ -d ./coverage ]; then
-            echo "Coverage reports generated:"
+            echo "Contents of ./coverage:"
+            ls -lah ./coverage/
+            echo ""
+            echo "Coverage reports:"
             find ./coverage -name "*.cobertura.xml" -type f
+            echo ""
+            echo "All files in coverage directory:"
+            find ./coverage -type f
+          else
+            echo "ERROR: ./coverage directory not found"
           fi
       
       - name: Install ReportGenerator
@@ -97,21 +107,27 @@ jobs:
       - name: Check coverage threshold
         if: always()
         run: |
+          echo "Looking for coverage XML files..."
+          find ./coverage -name "*.cobertura.xml" -type f
+          
           COVERAGE_XML=$(find ./coverage -name "*.cobertura.xml" -type f | head -1)
           if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
+            echo "Found coverage XML: $COVERAGE_XML"
             LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
             PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
             echo "Current coverage: $PERCENTAGE%"
             echo "Required coverage: $COVERAGE_THRESHOLD%"
             
             if (( $(echo "$PERCENTAGE < $COVERAGE_THRESHOLD" | bc -l) )); then
-              echo "Coverage $PERCENTAGE% is below threshold $COVERAGE_THRESHOLD%"
+              echo "ERROR: Coverage $PERCENTAGE% is below threshold $COVERAGE_THRESHOLD%"
               exit 1
             else
-              echo "Coverage $PERCENTAGE% meets threshold $COVERAGE_THRESHOLD%"
+              echo "SUCCESS: Coverage $PERCENTAGE% meets threshold $COVERAGE_THRESHOLD%"
             fi
           else
-            echo "No coverage XML found"
+            echo "ERROR: No coverage XML found"
+            echo "Contents of coverage directory:"
+            ls -la ./coverage/ || echo "Coverage directory not found"
             exit 1
           fi
       
