@@ -1,6 +1,9 @@
 using Amazon.CloudWatch;
+using Amazon.CloudWatch.Model;
+using Amazon.Runtime;
 using Amazon.SecretsManager;
 using Amazon.SQS;
+using Amazon.SQS.Model;
 using ItemMaster.Application;
 using ItemMaster.Application.Services;
 using ItemMaster.Infrastructure;
@@ -92,13 +95,54 @@ public class DependencyInjectionService : IDependencyInjectionService
 
     private void RegisterTestModeServices(IServiceCollection services)
     {
-        // Database - In-memory for testing
-        services.AddDbContext<MySqlDbContext>(o => o.UseInMemoryDatabase(ConfigurationConstants.IN_MEMORY_DB_NAME));
+        // Check if we're in integration test mode (has MYSQL_HOST)
+        var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
+        var isIntegrationTestMode = !string.IsNullOrEmpty(mysqlHost);
 
-        // Note: Test implementations are now in the Test project
-        // For unit testing, use the TestImplementations from ItemMaster.Lambda.Tests.Infrastructure
+        if (isIntegrationTestMode)
+        {
+            // Integration test mode - use real MySQL
+            var mysqlDb = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "item_master";
+            var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "im_user";
+            var mysqlPass = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "im_pass";
+            var connectionString = $"Server={mysqlHost};Database={mysqlDb};User={mysqlUser};Password={mysqlPass};CharSet=utf8mb4;";
 
-        // Use production implementations with in-memory database for integration testing
+            services.AddDbContext<MySqlDbContext>(options =>
+            {
+                options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+            });
+
+            // Use LocalStack-aware AWS clients for integration tests
+            var awsEndpoint = Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL");
+            if (!string.IsNullOrEmpty(awsEndpoint))
+            {
+                services.AddSingleton<IAmazonSQS>(sp =>
+                {
+                    var config = new AmazonSQSConfig
+                    {
+                        ServiceURL = awsEndpoint,
+                        UseHttp = true
+                    };
+                    return new AmazonSQSClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
+                });
+                services.AddSingleton<IAmazonCloudWatch>(sp =>
+                {
+                    var config = new AmazonCloudWatchConfig
+                    {
+                        ServiceURL = awsEndpoint,
+                        UseHttp = true
+                    };
+                    return new AmazonCloudWatchClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
+                });
+            }
+        }
+        else
+        {
+            // Unit test mode - In-memory database
+            services.AddDbContext<MySqlDbContext>(o => o.UseInMemoryDatabase(ConfigurationConstants.IN_MEMORY_DB_NAME));
+        }
+
+        // Use production implementations
         services.AddScoped<IItemMasterLogRepository, EfItemMasterLogRepository>();
         services.AddScoped<IItemPublisher, SqsItemPublisher>();
         services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();

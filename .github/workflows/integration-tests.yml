@@ -13,6 +13,8 @@ env:
   AWS_REGION: ap-southeast-1
   LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
   MYSQL_SECRET_ID: ${{ secrets.RDS_SECRET_ID }}
+  ITEMMASTER_TEST_MODE: "true"
+  SQS_QUEUE_URL: http://localhost:4566/000000000000/itemmaster-test-queue
 
 jobs:
   integration-tests:
@@ -134,6 +136,17 @@ jobs:
           AWS_REGION: ap-southeast-1
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
+          ITEMMASTER_TEST_MODE: "true"
+          SQS_URL: http://localhost:4566/000000000000/itemmaster-test-queue
+          sqs__url: http://localhost:4566/000000000000/itemmaster-test-queue
+          snowflake__database: XB_DEV_DB
+          snowflake__schema: ITEM_PETAL_US
+          snowflake__table: ITEM_PETAL_US
+          snowflake__warehouse: COMPUTE_WH
+          MYSQL_HOST: localhost
+          MYSQL_DATABASE: item_master
+          MYSQL_USER: im_user
+          MYSQL_PASSWORD: im_pass
         run: |
           dotnet test ItemMaster.Lambda/test/ItemMaster.Integration.Tests/ItemMaster.Integration.Tests.csproj \
             --configuration Release \
