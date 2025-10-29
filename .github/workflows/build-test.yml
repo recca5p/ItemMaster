@@ -88,6 +88,7 @@ jobs:
             test-results.trx
             coverage/
             coverage-html/
+            coverage-html/Cobertura.xml
           retention-days: 30
       
       - name: Publish Lambda package (linux-arm64)
@@ -169,7 +170,16 @@ jobs:
       - name: Generate coverage summary
         id: coverage
         run: |
-          COVERAGE_XML=$(find ./test-results -name "coverage.cobertura.xml" | head -1)
+          # Look for merged coverage XML first
+          MERGED_XML=$(find ./test-results -name "Cobertura.xml" -type f | head -1)
+          
+          if [ -n "$MERGED_XML" ] && [ -f "$MERGED_XML" ]; then
+            echo "Using merged coverage XML: $MERGED_XML"
+            COVERAGE_XML="$MERGED_XML"
+          else
+            COVERAGE_XML=$(find ./test-results -name "*.cobertura.xml" -type f | head -1)
+            echo "Using individual coverage XML: $COVERAGE_XML"
+          fi
           
           if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
             LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")

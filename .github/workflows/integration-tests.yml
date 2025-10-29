@@ -38,7 +38,7 @@ jobs:
       localstack:
         image: localstack/localstack:latest
         env:
-          SERVICES: sqs,secretsmanager
+          SERVICES: sqs,secretsmanager,cloudwatch
           DEBUG: 1
           DOCKER_HOST: unix:///var/run/docker.sock
         ports:
