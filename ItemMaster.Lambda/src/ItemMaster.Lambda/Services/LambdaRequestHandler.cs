@@ -4,6 +4,8 @@ using ItemMaster.Application;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using ItemMaster.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog.Context;
@@ -135,7 +137,19 @@ public class LambdaRequestHandler : ILambdaRequestHandler
             logger.LogInformation("[EXECUTE] Processing request from source: {RequestSource} | TraceId: {TraceId}",
                 requestSource, traceId);
 
-            var processRequest = requestProcessingService.ParseRequest(input, requestSource, traceId);
+            ProcessSkusRequest processRequest;
+            try
+            {
+                processRequest = requestProcessingService.ParseRequest(input, requestSource, traceId);
+            }
+            catch (JsonException jsonEx)
+            {
+                logger.LogWarning("[EXECUTE] Invalid JSON in request: {Error} | TraceId: {TraceId}",
+                    jsonEx.Message, traceId);
+                return responseService.CreateErrorResponse(
+                    $"Invalid request format: {jsonEx.Message}", traceId, 400);
+            }
+
             logger.LogInformation("[EXECUTE] Request parsed successfully. SKUs count: {SkuCount}",
                 processRequest?.Skus?.Count ?? 0);
 
@@ -144,7 +158,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
 
             var cancellationToken = CreateCancellationToken(context);
             logger.LogInformation("[EXECUTE] Starting use case execution");
-            var result = await useCase.ExecuteAsync(processRequest, requestSource, traceId, cancellationToken);
+            var result = await useCase.ExecuteAsync(processRequest!, requestSource, traceId, cancellationToken);
 
             if (result.IsSuccess)
             {
