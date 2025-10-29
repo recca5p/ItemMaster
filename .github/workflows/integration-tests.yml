@@ -13,7 +13,7 @@ env:
   AWS_REGION: ap-southeast-1
   LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
   MYSQL_SECRET_ID: ${{ secrets.RDS_SECRET_ID }}
-  ITEMMASTER_TEST_MODE: "true"
+  ITEMMASTER_TEST_MODE: 'true'
   SQS_QUEUE_URL: http://localhost:4566/000000000000/itemmaster-test-queue
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=3
-      
+
       localstack:
         image: localstack/localstack:latest
         env:
@@ -48,14 +48,14 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=3
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
-      
+
       - name: Configure AWS credentials for LocalStack
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -64,41 +64,47 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
         env:
           AWS_ENDPOINT_URL: http://localhost:4566
-      
+
       - name: Create SQS queue
         run: |
           aws sqs create-queue \
-            --queue-name im-dev-item-master-queue \
+            --queue-name itemmaster-test-queue \
             --endpoint-url http://localhost:4566 \
-            --region $AWS_REGION
-      
+            --region $AWS_REGION || echo "Queue might already exist"
+
       - name: Create secrets in LocalStack
         run: |
           aws secretsmanager create-secret \
             --name $MYSQL_SECRET_ID \
             --secret-string '{"username":"im_user","password":"im_pass","host":"mysql","port":3306,"database":"item_master"}' \
             --endpoint-url http://localhost:4566 \
-            --region $AWS_REGION
-      
+            --region $AWS_REGION || echo "MySQL secret might already exist"
+
+          aws secretsmanager create-secret \
+            --name test/snowflake-rsa-key \
+            --secret-string '{"private_key":"-----BEGIN PRIVATE KEY-----\nMOCK_KEY_FOR_TESTING\n-----END PRIVATE KEY-----"}' \
+            --endpoint-url http://localhost:4566 \
+            --region $AWS_REGION || echo "Snowflake secret might already exist"
+
       - name: Restore dependencies
         run: dotnet restore
-      
+
       - name: Build integration tests
         run: dotnet build ItemMaster.Lambda/test/ItemMaster.Integration.Tests/ItemMaster.Integration.Tests.csproj --configuration Release
-      
+
       - name: Install EF Core tools
         run: dotnet tool install --global dotnet-ef --version 8.0.0
-      
+
       - name: Install MySQL client
         run: sudo apt-get update && sudo apt-get install -y mysql-client
-      
+
       - name: Apply database migrations
         run: |
           cd ItemMaster.Lambda/src/ItemMaster.Infrastructure
           dotnet ef database update \
             --startup-project ../ItemMaster.Lambda \
             --connection "Server=localhost;Database=item_master;User=im_user;Password=im_pass;"
-      
+
       - name: Wait for MySQL to be ready
         run: |
           echo "Waiting for MySQL to be ready..."
@@ -111,13 +117,13 @@ jobs:
             echo "Waiting for MySQL... ($i/60)"
             sleep 2
           done
-          
+
           # Final check
           if ! mysql -h 127.0.0.1 -P 3306 -u im_user -pim_pass item_master -e "SELECT 1" 2>/dev/null; then
             echo "ERROR: MySQL failed to become ready after 120 seconds"
             exit 1
           fi
-      
+
       - name: Wait for LocalStack to be ready
         run: |
           echo "Waiting for LocalStack to be ready..."
@@ -129,31 +135,35 @@ jobs:
             echo "Waiting for LocalStack... ($i/60)"
             sleep 2
           done
-      
+
       - name: Run integration tests
         env:
           AWS_ENDPOINT_URL: http://localhost:4566
           AWS_REGION: ap-southeast-1
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
-          ITEMMASTER_TEST_MODE: "true"
+          ITEMMASTER_TEST_MODE: 'true'
           SQS_URL: http://localhost:4566/000000000000/itemmaster-test-queue
           sqs__url: http://localhost:4566/000000000000/itemmaster-test-queue
           snowflake__database: XB_DEV_DB
           snowflake__schema: ITEM_PETAL_US
           snowflake__table: ITEM_PETAL_US
           snowflake__warehouse: COMPUTE_WH
+          snowflake__account: TEST_ACCOUNT
+          snowflake__user: TEST_USER
+          snowflake__role: TEST_ROLE
           MYSQL_HOST: localhost
           MYSQL_DATABASE: item_master
           MYSQL_USER: im_user
           MYSQL_PASSWORD: im_pass
+          SSM_RSA_PATH: test/snowflake-rsa-key
         run: |
           dotnet test ItemMaster.Lambda/test/ItemMaster.Integration.Tests/ItemMaster.Integration.Tests.csproj \
             --configuration Release \
             --no-build \
             --logger "trx;LogFileName=integration-results.trx" \
             --filter Category=Integration
-      
+
       - name: Upload integration test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -161,7 +171,7 @@ jobs:
           name: integration-test-results
           path: integration-results.trx
           retention-days: 30
-      
+
       - name: Generate summary
         if: always()
         run: |

@@ -57,8 +57,13 @@ public class LambdaRequestHandler : ILambdaRequestHandler
                 var logger = scope.ServiceProvider.GetRequiredService<ILogger<LambdaRequestHandler>>();
                 var responseService = scope.ServiceProvider.GetRequiredService<IResponseService>();
 
-                logger.LogError(ex, "Unhandled exception in Lambda request handler: {Error} | StackTrace: {StackTrace}",
-                    ex.Message, ex.StackTrace);
+                logger.LogError(ex, 
+                    "[ERROR] Unhandled exception in Lambda request handler. Error: {Error} | Type: {ExceptionType} | StackTrace: {StackTrace} | InnerException: {InnerException}",
+                    ex.Message, ex.GetType().FullName, ex.StackTrace, ex.InnerException?.Message ?? "none");
+                
+                // Log full exception details including inner exceptions
+                var fullException = ex.ToString();
+                logger.LogError("[ERROR] Full exception details: {FullException}", fullException);
 
                 return responseService.CreateErrorResponse(
                     $"Internal server error: {ex.Message}",
@@ -125,24 +130,40 @@ public class LambdaRequestHandler : ILambdaRequestHandler
         IResponseService responseService,
         IServiceScope scope)
     {
-        logger.LogInformation("Processing request from source: {RequestSource} | TraceId: {TraceId}",
-            requestSource, traceId);
-
-        var processRequest = requestProcessingService.ParseRequest(input, requestSource, traceId);
-        var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
-
-        var cancellationToken = CreateCancellationToken(context);
-        var result = await useCase.ExecuteAsync(processRequest, requestSource, traceId, cancellationToken);
-
-        if (result.IsSuccess)
+        try
         {
-            logger.LogInformation("Lambda execution completed successfully | TraceId: {TraceId}", traceId);
-            return responseService.CreateSuccessResponse(result.Value, traceId);
-        }
+            logger.LogInformation("[EXECUTE] Processing request from source: {RequestSource} | TraceId: {TraceId}",
+                requestSource, traceId);
 
-        var errorMessage = result.ErrorMessage ?? "Unknown error occurred";
-        logger.LogError("ProcessSkus failed: {Error} | TraceId: {TraceId}", errorMessage, traceId);
-        return responseService.CreateErrorResponse(errorMessage, traceId);
+            var processRequest = requestProcessingService.ParseRequest(input, requestSource, traceId);
+            logger.LogInformation("[EXECUTE] Request parsed successfully. SKUs count: {SkuCount}", 
+                processRequest?.Skus?.Count ?? 0);
+            
+            var useCase = scope.ServiceProvider.GetRequiredService<IProcessSkusUseCase>();
+            logger.LogInformation("[EXECUTE] Use case resolved successfully");
+
+            var cancellationToken = CreateCancellationToken(context);
+            logger.LogInformation("[EXECUTE] Starting use case execution");
+            var result = await useCase.ExecuteAsync(processRequest, requestSource, traceId, cancellationToken);
+
+            if (result.IsSuccess)
+            {
+                logger.LogInformation("[EXECUTE] Lambda execution completed successfully | TraceId: {TraceId}", traceId);
+                return responseService.CreateSuccessResponse(result.Value, traceId);
+            }
+
+            var errorMessage = result.ErrorMessage ?? "Unknown error occurred";
+            logger.LogError("[EXECUTE] ProcessSkus failed: {Error} | TraceId: {TraceId}", errorMessage, traceId);
+            return responseService.CreateErrorResponse(errorMessage, traceId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, 
+                "[EXECUTE] Exception in ExecuteBusinessLogic. Error: {Error} | Type: {ExceptionType} | StackTrace: {StackTrace} | InnerException: {InnerException}",
+                ex.Message, ex.GetType().FullName, ex.StackTrace, ex.InnerException?.Message ?? "none");
+            logger.LogError("[EXECUTE] Full exception: {FullException}", ex.ToString());
+            throw; // Re-throw to be caught by outer handler
+        }
     }
 
     private static CancellationToken CreateCancellationToken(ILambdaContext context)

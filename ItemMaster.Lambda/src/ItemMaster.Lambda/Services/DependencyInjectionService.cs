@@ -52,7 +52,7 @@ public class DependencyInjectionService : IDependencyInjectionService
         RegisterLambdaServices(services);
 
         if (isTestMode)
-            RegisterTestModeServices(services);
+            RegisterTestModeServices(services, configuration);
         else
             RegisterProductionServices(services, configuration);
 
@@ -94,11 +94,14 @@ public class DependencyInjectionService : IDependencyInjectionService
         services.AddScoped<IDatabaseMigrationService, DatabaseMigrationService>();
     }
 
-    private void RegisterTestModeServices(IServiceCollection services)
+    private void RegisterTestModeServices(IServiceCollection services, IConfiguration configuration)
     {
         // Check if we're in integration test mode (has MYSQL_HOST)
         var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
         var isIntegrationTestMode = !string.IsNullOrEmpty(mysqlHost);
+        
+        // Log DI setup information (before logger is available from DI)
+        Console.WriteLine($"[DI] Registering test mode services. Integration test mode: {isIntegrationTestMode}, MYSQL_HOST: {mysqlHost ?? "not set"}, AWS_ENDPOINT_URL: {Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL") ?? "not set"}, SQS_URL: {configuration[ConfigurationConstants.SQS_URL] ?? "not set"}");
 
         if (isIntegrationTestMode)
         {
@@ -117,6 +120,10 @@ public class DependencyInjectionService : IDependencyInjectionService
             var awsEndpoint = Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL");
             if (!string.IsNullOrEmpty(awsEndpoint))
             {
+                // For LocalStack, use explicit credentials and don't set RegionEndpoint
+                // Setting RegionEndpoint with ServiceURL can cause credential validation issues
+                var credentials = new Amazon.Runtime.BasicAWSCredentials("test", "test");
+
                 services.AddSingleton<IAmazonSecretsManager>(sp =>
                 {
                     var config = new AmazonSecretsManagerConfig
@@ -124,7 +131,7 @@ public class DependencyInjectionService : IDependencyInjectionService
                         ServiceURL = awsEndpoint,
                         UseHttp = true
                     };
-                    return new AmazonSecretsManagerClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
+                    return new AmazonSecretsManagerClient(credentials, config);
                 });
 
                 services.AddSingleton<IAmazonSQS>(sp =>
@@ -134,7 +141,7 @@ public class DependencyInjectionService : IDependencyInjectionService
                         ServiceURL = awsEndpoint,
                         UseHttp = true
                     };
-                    return new AmazonSQSClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
+                    return new AmazonSQSClient(credentials, config);
                 });
 
                 services.AddSingleton<IAmazonCloudWatch>(sp =>
@@ -144,7 +151,7 @@ public class DependencyInjectionService : IDependencyInjectionService
                         ServiceURL = awsEndpoint,
                         UseHttp = true
                     };
-                    return new AmazonCloudWatchClient(new Amazon.Runtime.BasicAWSCredentials("test", "test"), config);
+                    return new AmazonCloudWatchClient(credentials, config);
                 });
             }
             else
@@ -190,6 +197,18 @@ public class DependencyInjectionService : IDependencyInjectionService
         else
         {
             services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();
+        }
+
+        // Configure SQS options - REQUIRED for SqsItemPublisher to work
+        ConfigureSqsOptions(services, configuration);
+        
+        var sqsUrl = configuration[ConfigurationConstants.SQS_URL];
+        Console.WriteLine($"[DI] SQS options configured. QueueUrl: {sqsUrl ?? "MISSING"}");
+        
+        if (string.IsNullOrEmpty(sqsUrl))
+        {
+            throw new InvalidOperationException(
+                $"SQS QueueUrl is not configured! Please set {ConfigurationConstants.SQS_URL} environment variable or configuration key.");
         }
 
         // Use production implementations
