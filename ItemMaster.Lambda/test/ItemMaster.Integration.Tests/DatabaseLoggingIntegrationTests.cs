@@ -154,9 +154,14 @@ public class DatabaseLoggingIntegrationTests : IntegrationTestBase
 
     private static MySqlDbContext CreateDbContext()
     {
-        var connectionString = $"Server=localhost;Database=item_master;User=im_user;Password=im_pass;CharSet=utf8mb4;";
+        var host = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
+        var database = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "item_master";
+        var user = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "im_user";
+        var password = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "im_pass";
+        var connectionString = $"Server={host};Database={database};User={user};Password={password};CharSet=utf8mb4;";
+
         var optionsBuilder = new DbContextOptionsBuilder<MySqlDbContext>();
-        optionsBuilder.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+        optionsBuilder.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 35)));
         return new MySqlDbContext(optionsBuilder.Options);
     }
 }

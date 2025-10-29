@@ -56,7 +56,7 @@ public class IntegrationTestSetup : IDisposable
     private void SeedTestData()
     {
         var optionsBuilder = new DbContextOptionsBuilder<MySqlDbContext>();
-        optionsBuilder.UseMySql(_connectionString, ServerVersion.AutoDetect(_connectionString));
+        optionsBuilder.UseMySql(_connectionString, new MySqlServerVersion(new Version(8, 0, 35)));
 
         _dbContext = new MySqlDbContext(optionsBuilder.Options);
 
