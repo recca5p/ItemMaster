@@ -109,14 +109,31 @@ jobs:
             sleep 2
           done
       
+      - name: Wait for LocalStack to be ready
+        run: |
+          echo "Waiting for LocalStack to be ready..."
+          for i in {1..60}; do
+            if curl -f http://localhost:4566/_localstack/health 2>/dev/null; then
+              echo "LocalStack is ready"
+              break
+            fi
+            echo "Waiting for LocalStack... ($i/60)"
+            sleep 2
+          done
+      
       - name: Run integration tests
-        continue-on-error: true
+        env:
+          AWS_ENDPOINT_URL: http://localhost:4566
+          AWS_REGION: ap-southeast-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
         run: |
           dotnet test ItemMaster.Lambda/test/ItemMaster.Integration.Tests/ItemMaster.Integration.Tests.csproj \
             --configuration Release \
             --no-build \
             --logger "trx;LogFileName=integration-results.trx" \
-            --filter Category=Integration
+            --filter Category=Integration \
+            -- "NUnit.DefaultTestNamePattern={m}"
       
       - name: Upload integration test results
         if: always()
