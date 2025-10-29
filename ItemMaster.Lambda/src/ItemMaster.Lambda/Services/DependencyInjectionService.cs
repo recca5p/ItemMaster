@@ -167,9 +167,10 @@ public class DependencyInjectionService : IDependencyInjectionService
             // Integration test: Use mock Snowflake connection provider
             services.AddScoped<SnowflakeConnectionProvider, MockSnowflakeConnectionProvider>(sp =>
             {
+                var secretsManager = sp.GetRequiredService<IAmazonSecretsManager>();
                 var logger = sp.GetRequiredService<ILogger<SnowflakeConnectionProvider>>();
                 var config = sp.GetRequiredService<IConfiguration>();
-                return new MockSnowflakeConnectionProvider(logger, config);
+                return new MockSnowflakeConnectionProvider(secretsManager, logger, config);
             });
         }
         else

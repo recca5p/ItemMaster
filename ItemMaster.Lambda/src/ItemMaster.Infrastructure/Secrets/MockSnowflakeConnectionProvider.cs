@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Amazon.SecretsManager;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -11,9 +12,10 @@ public class MockSnowflakeConnectionProvider : SnowflakeConnectionProvider
   private readonly IConfiguration _mockConfiguration;
 
   public MockSnowflakeConnectionProvider(
+      IAmazonSecretsManager secretsManager,
       ILogger<SnowflakeConnectionProvider> logger,
       IConfiguration configuration)
-      : base(new Amazon.SecretsManager.AmazonSecretsManagerClient(), configuration, logger)
+      : base(secretsManager, configuration, logger)
   {
     _mockLogger = logger;
     _mockConfiguration = configuration;

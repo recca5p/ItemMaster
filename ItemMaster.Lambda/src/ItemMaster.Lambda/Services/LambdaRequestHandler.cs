@@ -30,21 +30,49 @@ public class LambdaRequestHandler : ILambdaRequestHandler
 
     public async Task<APIGatewayProxyResponse> HandleRequestAsync(object input, ILambdaContext context)
     {
-        using var scope = _serviceProvider.CreateScope();
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
 
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<LambdaRequestHandler>>();
-        var requestSourceDetector = scope.ServiceProvider.GetRequiredService<IRequestSourceDetector>();
-        var requestProcessingService = scope.ServiceProvider.GetRequiredService<IRequestProcessingService>();
-        var responseService = scope.ServiceProvider.GetRequiredService<IResponseService>();
-        var observabilityService = scope.ServiceProvider.GetRequiredService<IObservabilityService>();
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<LambdaRequestHandler>>();
+            var requestSourceDetector = scope.ServiceProvider.GetRequiredService<IRequestSourceDetector>();
+            var requestProcessingService = scope.ServiceProvider.GetRequiredService<IRequestProcessingService>();
+            var responseService = scope.ServiceProvider.GetRequiredService<IResponseService>();
+            var observabilityService = scope.ServiceProvider.GetRequiredService<IObservabilityService>();
 
-        var requestSource = requestSourceDetector.DetectSource(input);
+            var requestSource = requestSourceDetector.DetectSource(input);
 
-        if (IsHealthCheckRequest(requestSource)) return HandleHealthCheckRequest(responseService, logger);
+            if (IsHealthCheckRequest(requestSource)) return HandleHealthCheckRequest(responseService, logger);
 
-        return await ProcessBusinessRequest(
-            input, context, requestSource, logger, requestProcessingService,
-            responseService, observabilityService, scope);
+            return await ProcessBusinessRequest(
+                input, context, requestSource, logger, requestProcessingService,
+                responseService, observabilityService, scope);
+        }
+        catch (Exception ex)
+        {
+            // Fallback error handling if service resolution or other critical errors occur
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<LambdaRequestHandler>>();
+                var responseService = scope.ServiceProvider.GetRequiredService<IResponseService>();
+
+                logger.LogError(ex, "Unhandled exception in Lambda request handler: {Error} | StackTrace: {StackTrace}",
+                    ex.Message, ex.StackTrace);
+
+                return responseService.CreateErrorResponse(
+                    $"Internal server error: {ex.Message}",
+                    context.AwsRequestId ?? "unknown");
+            }
+            catch
+            {
+                // If even error handling fails, return a basic error response
+                var basicResponseService = new ResponseService();
+                return basicResponseService.CreateErrorResponse(
+                    $"Critical error: {ex.Message}",
+                    context.AwsRequestId ?? "unknown");
+            }
+        }
     }
 
     private static bool IsHealthCheckRequest(RequestSource requestSource)
@@ -71,7 +99,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
         IObservabilityService observabilityService,
         IServiceScope scope)
     {
-        var traceId = observabilityService.GetCurrentTraceId();
+        var traceId = observabilityService.GetCurrentTraceId() ?? "unknown";
 
         using (LogContext.PushProperty("AwsRequestId", context.AwsRequestId))
         using (LogContext.PushProperty("RequestSource", requestSource.ToString()))
@@ -112,8 +140,9 @@ public class LambdaRequestHandler : ILambdaRequestHandler
             return responseService.CreateSuccessResponse(result.Value, traceId);
         }
 
-        logger.LogError("ProcessSkus failed: {Error} | TraceId: {TraceId}", result.ErrorMessage, traceId);
-        return responseService.CreateErrorResponse(result.ErrorMessage, traceId);
+        var errorMessage = result.ErrorMessage ?? "Unknown error occurred";
+        logger.LogError("ProcessSkus failed: {Error} | TraceId: {TraceId}", errorMessage, traceId);
+        return responseService.CreateErrorResponse(errorMessage, traceId);
     }
 
     private static CancellationToken CreateCancellationToken(ILambdaContext context)
