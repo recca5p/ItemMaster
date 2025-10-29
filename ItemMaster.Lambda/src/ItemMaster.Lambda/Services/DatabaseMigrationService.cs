@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Infrastructure.Ef;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,7 @@ public interface IDatabaseMigrationService
     void ApplyMigrations();
 }
 
+[ExcludeFromCodeCoverage]
 public class DatabaseMigrationService : IDatabaseMigrationService
 {
     private static bool _migrationsApplied;

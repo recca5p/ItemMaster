@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ItemMaster.Shared;
 
+[ExcludeFromCodeCoverage]
 public class ItemMasterSourceLog
 {
     public int Id { get; set; }

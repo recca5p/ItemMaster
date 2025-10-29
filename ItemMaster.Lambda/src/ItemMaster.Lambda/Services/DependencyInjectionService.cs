@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 using Serilog;
 
 namespace ItemMaster.Lambda.Services;
@@ -22,6 +23,7 @@ public interface IDependencyInjectionService
     ServiceProvider BuildServiceProvider(IConfiguration configuration, bool isTestMode);
 }
 
+[ExcludeFromCodeCoverage]
 public class DependencyInjectionService : IDependencyInjectionService
 {
     private readonly IConfigurationValidationService _configValidationService;

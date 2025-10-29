@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace ItemMaster.Contracts;
 
+[ExcludeFromCodeCoverage]
 public class UnifiedItemMaster
 {
     [JsonPropertyName("Sku")] public string Sku { get; set; } = string.Empty;
@@ -39,6 +41,7 @@ public class UnifiedItemMaster
     [JsonPropertyName("Dates")] public List<DateInfo> Dates { get; set; } = new();
 }
 
+[ExcludeFromCodeCoverage]
 public class PriceInfo
 {
     [JsonPropertyName("Type")] public string Type { get; set; } = string.Empty;
@@ -48,6 +51,7 @@ public class PriceInfo
     [JsonPropertyName("Value")] public decimal Value { get; set; }
 }
 
+[ExcludeFromCodeCoverage]
 public class CostInfo
 {
     [JsonPropertyName("Type")] public string Type { get; set; } = string.Empty;
@@ -57,6 +61,7 @@ public class CostInfo
     [JsonPropertyName("Value")] public decimal Value { get; set; }
 }
 
+[ExcludeFromCodeCoverage]
 public class CategoryInfo
 {
     [JsonPropertyName("Path")] public string Path { get; set; } = string.Empty;
@@ -64,6 +69,7 @@ public class CategoryInfo
     [JsonPropertyName("Source")] public string Source { get; set; } = string.Empty;
 }
 
+[ExcludeFromCodeCoverage]
 public class AttributeInfo
 {
     [JsonPropertyName("Id")] public string Id { get; set; } = string.Empty;
@@ -71,6 +77,7 @@ public class AttributeInfo
     [JsonPropertyName("Value")] public string Value { get; set; } = string.Empty;
 }
 
+[ExcludeFromCodeCoverage]
 public class LinkInfo
 {
     [JsonPropertyName("Url")] public string Url { get; set; } = string.Empty;
@@ -78,6 +85,7 @@ public class LinkInfo
     [JsonPropertyName("Source")] public string Source { get; set; } = string.Empty;
 }
 
+[ExcludeFromCodeCoverage]
 public class ImageInfo
 {
     [JsonPropertyName("Url")] public string Url { get; set; } = string.Empty;
@@ -85,6 +93,7 @@ public class ImageInfo
     [JsonPropertyName("SizeType")] public string SizeType { get; set; } = string.Empty;
 }
 
+[ExcludeFromCodeCoverage]
 public class DateInfo
 {
     [JsonPropertyName("CreatedAt")] public string? CreatedAt { get; set; }

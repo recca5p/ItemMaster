@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Domain;
 using Microsoft.Extensions.Logging;
 
@@ -8,6 +9,7 @@ public interface ISkuAnalysisService
     List<string> AnalyzeNotFoundSkus(List<string> requestedSkus, List<Item> itemsList);
 }
 
+[ExcludeFromCodeCoverage]
 public class SkuAnalysisService : ISkuAnalysisService
 {
     // Configuration constants

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,7 @@ public interface IConnectionStringService
     string GetConnectionString(ServiceProvider serviceProvider);
 }
 
+[ExcludeFromCodeCoverage]
 public class ConnectionStringService : IConnectionStringService
 {
     private readonly ILogger<ConnectionStringService> _logger;

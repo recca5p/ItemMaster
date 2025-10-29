@@ -57,11 +57,11 @@ public class UnifiedItemMapper : IUnifiedItemMapper
 
         if (string.IsNullOrWhiteSpace(item.Size)) validationErrors.Add("Missing Size");
 
-        // If there are critical validation errors, return failure with all errors
+        // Initial validation - check core fields first
         if (validationErrors.Any())
         {
             var sku = string.IsNullOrWhiteSpace(item.Sku) ? "UNKNOWN" : item.Sku;
-            _logger.LogWarning("Item {Sku} failed validation with {ErrorCount} errors: {Errors}",
+            _logger.LogWarning("Item {Sku} failed initial validation with {ErrorCount} errors: {Errors}",
                 sku, validationErrors.Count, string.Join("; ", validationErrors));
             return MappingResult.Failure(sku, validationErrors);
         }
@@ -120,31 +120,32 @@ public class UnifiedItemMapper : IUnifiedItemMapper
 
         // Costs - unit and landed costs
         unifiedItem.Costs = new List<CostInfo>();
-        if (item.Cost > 0 || item.LandedCost > 0)
-        {
-            if (item.Cost > 0)
-                unifiedItem.Costs.Add(new CostInfo
-                {
-                    Type = "unit",
-                    Currency = "USD",
-                    Value = (decimal)item.Cost
-                });
-            else
-                skippedProperties.Add("Cost.unit");
 
-            if (item.LandedCost > 0)
-                unifiedItem.Costs.Add(new CostInfo
-                {
-                    Type = "landed",
-                    Currency = "USD",
-                    Value = (decimal)item.LandedCost
-                });
-            else
-                skippedProperties.Add("Cost.landed");
+        // Unit cost is optional
+        if (item.Cost > 0)
+        {
+            unifiedItem.Costs.Add(new CostInfo
+            {
+                Type = "unit",
+                Currency = "USD",
+                Value = (decimal)item.Cost
+            });
+        }
+
+        // Landed cost is REQUIRED per mapping rules
+        if (item.LandedCost > 0)
+        {
+            unifiedItem.Costs.Add(new CostInfo
+            {
+                Type = "landed",
+                Currency = "USD",
+                Value = (decimal)item.LandedCost
+            });
         }
         else
         {
-            skippedProperties.Add("Costs");
+            // Landed cost is required but missing
+            validationErrors.Add("Missing required LandedCost");
         }
 
         // Categories
@@ -179,15 +180,17 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         else
             skippedProperties.Add("Attribute.brand_name");
 
+        // Fabric content is REQUIRED per mapping rules
         if (!string.IsNullOrWhiteSpace(item.FabricContent))
             unifiedItem.Attributes.Add(new AttributeInfo { Id = "fabric_content", Value = item.FabricContent });
         else
-            skippedProperties.Add("Attribute.fabric_content");
+            validationErrors.Add("Missing required FabricContent");
 
+        // Fabric composition is REQUIRED per mapping rules
         if (!string.IsNullOrWhiteSpace(item.FabricComposition))
             unifiedItem.Attributes.Add(new AttributeInfo { Id = "fabric_composition", Value = item.FabricComposition });
         else
-            skippedProperties.Add("Attribute.fabric_composition");
+            validationErrors.Add("Missing required FabricComposition");
 
         if (!string.IsNullOrWhiteSpace(item.Gender))
             unifiedItem.Attributes.Add(new AttributeInfo { Id = "gender", Value = item.Gender });
@@ -273,6 +276,15 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             });
         else
             skippedProperties.Add("Date.Snowflake");
+
+        // Final validation - check if any new errors were added during mapping
+        if (validationErrors.Any())
+        {
+            var sku = string.IsNullOrWhiteSpace(item.Sku) ? "UNKNOWN" : item.Sku;
+            _logger.LogWarning("Item {Sku} failed validation with {ErrorCount} errors: {Errors}",
+                sku, validationErrors.Count, string.Join("; ", validationErrors));
+            return MappingResult.Failure(sku, validationErrors);
+        }
 
         if (skippedProperties.Any())
             _logger.LogInformation(

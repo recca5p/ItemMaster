@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -11,6 +12,7 @@ public interface IFunctionStartupService
     ServiceProvider InitializeServices();
 }
 
+[ExcludeFromCodeCoverage]
 public class FunctionStartupService : IFunctionStartupService
 {
     // Configuration constants

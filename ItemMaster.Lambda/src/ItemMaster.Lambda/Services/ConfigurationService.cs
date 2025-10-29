@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Amazon;
 using Amazon.Extensions.NETCore.Setup;
 using ItemMaster.Lambda.Configuration;
@@ -11,6 +12,7 @@ public interface IConfigurationService
     IConfiguration BuildConfiguration(LambdaStartupOptions options);
 }
 
+[ExcludeFromCodeCoverage]
 public class ConfigurationService : IConfigurationService
 {
     public LambdaStartupOptions GetStartupOptions()

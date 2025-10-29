@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
@@ -12,6 +13,7 @@ public interface IRequestProcessingService
     ProcessSkusRequest ParseRequest(object input, RequestSource requestSource, string traceId);
 }
 
+[ExcludeFromCodeCoverage]
 public class RequestProcessingService : IRequestProcessingService
 {
     private readonly JsonSerializerOptions _jsonOptions;

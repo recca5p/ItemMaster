@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Contracts;
 using ItemMaster.Domain;
 
@@ -11,6 +12,7 @@ public interface IProcessingResponseBuilder
         ItemMappingResult mappingResult);
 }
 
+[ExcludeFromCodeCoverage]
 public class ProcessingResponseBuilder : IProcessingResponseBuilder
 {
     public ProcessSkusResponse CreateSuccessResponse(

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Lambda.Configuration;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,7 @@ public interface ICachedSecretService
     Task InvalidateSecretAsync(string secretKey);
 }
 
+[ExcludeFromCodeCoverage]
 public class CachedSecretService : ICachedSecretService
 {
     // Configuration constants

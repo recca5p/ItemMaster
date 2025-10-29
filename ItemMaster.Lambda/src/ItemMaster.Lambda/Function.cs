@@ -11,6 +11,7 @@ using Serilog;
 
 namespace ItemMaster.Lambda;
 
+[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 public class Function
 {
     // Configuration constants

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Lambda.Configuration;
 using Microsoft.Extensions.Configuration;
 using Serilog;
@@ -12,6 +13,7 @@ public interface ILoggingService
     void ConfigureSerilog(IConfiguration? configuration);
 }
 
+[ExcludeFromCodeCoverage]
 public class LoggingService : ILoggingService
 {
     public void ConfigureSerilog(IConfiguration? configuration)

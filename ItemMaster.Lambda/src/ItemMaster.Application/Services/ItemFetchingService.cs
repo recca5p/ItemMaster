@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Domain;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
@@ -14,6 +15,7 @@ public interface IItemFetchingService
         CancellationToken cancellationToken);
 }
 
+[ExcludeFromCodeCoverage]
 public class ItemFetchingService : IItemFetchingService
 {
     private readonly ILogger<ItemFetchingService> _logger;

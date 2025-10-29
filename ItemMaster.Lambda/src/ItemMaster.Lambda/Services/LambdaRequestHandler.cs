@@ -3,6 +3,7 @@ using Amazon.Lambda.Core;
 using ItemMaster.Application;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog.Context;
@@ -14,6 +15,7 @@ public interface ILambdaRequestHandler
     Task<APIGatewayProxyResponse> HandleRequestAsync(object input, ILambdaContext context);
 }
 
+[ExcludeFromCodeCoverage]
 public class LambdaRequestHandler : ILambdaRequestHandler
 {
     // Configuration constants

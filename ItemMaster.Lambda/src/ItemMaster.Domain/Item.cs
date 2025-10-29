@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ItemMaster.Domain;
 
+[ExcludeFromCodeCoverage]
 public class Item
 {
     public string Brand { get; set; } = string.Empty;

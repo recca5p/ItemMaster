@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Contracts;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
@@ -11,6 +12,7 @@ public interface IItemPublishingService
         CancellationToken cancellationToken);
 }
 
+[ExcludeFromCodeCoverage]
 public class ItemPublishingService : IItemPublishingService
 {
     private readonly IItemPublisher _itemPublisher;

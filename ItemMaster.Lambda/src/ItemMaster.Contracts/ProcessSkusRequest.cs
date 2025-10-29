@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 namespace ItemMaster.Contracts;
 
+[ExcludeFromCodeCoverage]
 public class ProcessSkusRequest
 {
     public List<string> Skus { get; set; } = new();

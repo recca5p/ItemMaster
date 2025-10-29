@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ItemMaster.Contracts;
 
+[ExcludeFromCodeCoverage]
 public class ProcessSkusResponse
 {
     public bool Success { get; set; }
@@ -13,6 +16,7 @@ public class ProcessSkusResponse
     public List<PublishedItemDetail> PublishedItems { get; set; } = new();
 }
 
+[ExcludeFromCodeCoverage]
 public class SkippedItemDetail
 {
     public string Sku { get; set; } = string.Empty;
@@ -21,6 +25,7 @@ public class SkippedItemDetail
     public List<string> AllValidationErrors { get; set; } = new();
 }
 
+[ExcludeFromCodeCoverage]
 public class PublishedItemDetail
 {
     public string Sku { get; set; } = string.Empty;

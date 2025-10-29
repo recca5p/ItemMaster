@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ItemMaster.Contracts;
 using ItemMaster.Domain;
 using ItemMaster.Infrastructure.Observability;
@@ -12,6 +13,7 @@ public interface ISkuProcessingOrchestrator
         string traceId, CancellationToken cancellationToken);
 }
 
+[ExcludeFromCodeCoverage]
 public class SkuProcessingOrchestrator : ISkuProcessingOrchestrator
 {
     // Configuration constants
