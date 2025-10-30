@@ -1,7 +1,6 @@
-using Amazon.Lambda.APIGatewayEvents;
+using System.Text.Json;
 using FluentAssertions;
 using ItemMaster.Lambda.Services;
-using System.Text.Json;
 using Xunit;
 
 namespace ItemMaster.Lambda.Tests;
@@ -100,7 +99,7 @@ public class ResponseServiceTests
         // Assert
         result.StatusCode.Should().Be(200);
         result.Headers["Content-Type"].Should().Be("application/json");
-        
+
         var body = JsonSerializer.Deserialize<JsonElement>(result.Body);
         body.GetProperty("status").GetString().Should().Be("healthy");
         body.GetProperty("message").GetString().Should().Be("Lambda function is operational");
@@ -115,9 +114,8 @@ public class ResponseServiceTests
 
         // Assert
         var body = JsonSerializer.Deserialize<JsonElement>(result.Body);
-        body.GetProperty("timestamp").ValueKind.Should().Be(System.Text.Json.JsonValueKind.String);
+        body.GetProperty("timestamp").ValueKind.Should().Be(JsonValueKind.String);
         var timestamp = body.GetProperty("timestamp").GetString();
         DateTime.TryParse(timestamp, out _).Should().BeTrue();
     }
 }
-

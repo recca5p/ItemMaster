@@ -1,4 +1,4 @@
-using ItemMaster.Domain;
+using System.Text.Json;
 using ItemMaster.Infrastructure.Ef;
 using ItemMaster.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +33,7 @@ public class DatabaseSeeder
                 ValidationStatus = "valid",
                 IsSentToSqs = false,
                 CreatedAt = DateTime.UtcNow,
-                SourceModel = System.Text.Json.JsonSerializer.Serialize(item)
+                SourceModel = JsonSerializer.Serialize(item)
             };
 
             _dbContext.ItemMasterSourceLogs.Add(log);
@@ -55,7 +55,7 @@ public class DatabaseSeeder
     {
         return new List<ItemMasterSourceLog>
         {
-            new ItemMasterSourceLog
+            new()
             {
                 Sku = "TEST-001",
                 ValidationStatus = "valid",
@@ -63,7 +63,7 @@ public class DatabaseSeeder
                 CreatedAt = DateTime.UtcNow,
                 SourceModel = "{\"Sku\":\"TEST-001\",\"ProductTitle\":\"Test Item 1\"}"
             },
-            new ItemMasterSourceLog
+            new()
             {
                 Sku = "TEST-002",
                 ValidationStatus = "valid",
@@ -74,4 +74,3 @@ public class DatabaseSeeder
         };
     }
 }
-

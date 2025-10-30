@@ -242,4 +242,3 @@ public class SnowflakeConnectionProviderTests
         Environment.SetEnvironmentVariable("SSM_RSA_PATH", null);
     }
 }
-

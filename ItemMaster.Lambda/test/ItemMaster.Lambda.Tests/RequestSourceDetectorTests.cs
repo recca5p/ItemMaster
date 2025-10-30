@@ -1,17 +1,16 @@
+using System.Text.Json;
 using FluentAssertions;
-using ItemMaster.Lambda;
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Text.Json;
 using Xunit;
 
 namespace ItemMaster.Lambda.Tests;
 
 public class RequestSourceDetectorTests
 {
-    private readonly Mock<ILogger<RequestSourceDetector>> _mockLogger;
     private readonly RequestSourceDetector _detector;
+    private readonly Mock<ILogger<RequestSourceDetector>> _mockLogger;
 
     public RequestSourceDetectorTests()
     {
@@ -188,4 +187,3 @@ public class RequestSourceDetectorTests
         result.Should().Be(RequestSource.EventBridge);
     }
 }
-

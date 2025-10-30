@@ -23,17 +23,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
-      
+
       - name: Restore dependencies
         run: dotnet restore
-      
+
       - name: Build solution
         run: dotnet build --configuration Release --no-restore
-      
+
       - name: Run tests with coverage
         run: |
           dotnet test --configuration Release \
@@ -43,7 +43,7 @@ jobs:
             --settings coverage.runsettings \
             --filter "Category!=Integration" \
             --verbosity normal
-      
+
       - name: Find coverage XML files
         if: always()
         run: |
@@ -60,17 +60,17 @@ jobs:
           else
             echo "ERROR: ./coverage directory not found"
           fi
-      
+
       - name: Install ReportGenerator
         if: always()
         run: dotnet tool install -g dotnet-reportgenerator-globaltool
-      
+
       - name: Generate HTML coverage report and merge
         if: always()
         run: |
           REPORT_OUTPUT="./coverage-html"
           find ./coverage -name "*.cobertura.xml" -type f
-          
+
           reportgenerator \
             -reports:"./coverage/*/coverage.cobertura.xml" \
             -targetdir:"${REPORT_OUTPUT}" \
@@ -78,7 +78,7 @@ jobs:
             -classfilters:"-Microsoft.*;-System.*;-xunit.*" \
             -verbosity:Warning
           echo "Coverage HTML report generated in ${REPORT_OUTPUT}"
-      
+
       - name: Upload test results and coverage
         uses: actions/upload-artifact@v4
         if: always()
@@ -90,71 +90,81 @@ jobs:
             coverage-html/
             coverage-html/Cobertura.xml
           retention-days: 30
-      
+
       - name: Publish Lambda package (linux-arm64)
         run: |
           dotnet publish -c Release -r linux-arm64 --self-contained false -o $OUTPUT_DIR ./ItemMaster.Lambda/src/ItemMaster.Lambda
           cd $OUTPUT_DIR && zip -r ../function.zip . && cd -
-      
+
       - name: Upload Lambda package
         uses: actions/upload-artifact@v4
         with:
           name: lambda-package
           path: function.zip
-      
-      - name: Check coverage threshold
+
+      - name: Check coverage threshold and test results
         if: always()
         run: |
-          echo "Looking for merged coverage XML from reportgenerator..."
-          
           MERGED_XML=$(find ./coverage-html -name "Cobertura.xml" -type f | head -1)
-          if [ -n "$MERGED_XML" ]; then
-            echo "Using merged coverage XML: $MERGED_XML"
-            LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$MERGED_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
-            PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
-            echo "Current coverage: $PERCENTAGE%"
-            echo "Required coverage: $COVERAGE_THRESHOLD%"
-            
-            if (( $(echo "$PERCENTAGE < $COVERAGE_THRESHOLD" | bc -l) )); then
-              echo "ERROR: Coverage $PERCENTAGE% is below threshold $COVERAGE_THRESHOLD%"
-              exit 1
-            else
-              echo "SUCCESS: Coverage $PERCENTAGE% meets threshold $COVERAGE_THRESHOLD%"
-            fi
-          else
-            echo "ERROR: Merged coverage XML not found"
-            echo "Contents of coverage-html directory:"
-            ls -la ./coverage-html/ || echo "Coverage-html directory not found"
+          if [ -z "$MERGED_XML" ] || [ ! -f "$MERGED_XML" ]; then
+            echo "ERROR: Coverage XML not found"
             exit 1
           fi
-      
+
+          LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$MERGED_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
+          PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
+
+          if [ -f test-results.trx ]; then
+            FAILED_COUNT=$(grep -o 'testOutcome="Failed"' test-results.trx | wc -l || echo "0")
+            if [ "$FAILED_COUNT" -gt 0 ]; then
+              echo "ERROR: $FAILED_COUNT test(s) failed"
+              exit 1
+            fi
+          fi
+
+          if (( $(echo "$PERCENTAGE < $COVERAGE_THRESHOLD" | bc -l) )); then
+            echo "ERROR: Coverage $PERCENTAGE% is below threshold $COVERAGE_THRESHOLD%"
+            exit 1
+          fi
+
+          echo "Coverage: $PERCENTAGE% (threshold: $COVERAGE_THRESHOLD%)"
+
+      - name: Parse test results
+        if: always()
+        id: test-results
+        run: |
+          if [ -f test-results.trx ]; then
+            PASSED=$(grep -o 'testOutcome="Passed"' test-results.trx | wc -l || echo "0")
+            FAILED=$(grep -o 'testOutcome="Failed"' test-results.trx | wc -l || echo "0")
+            TOTAL=$((PASSED + FAILED))
+            
+            echo "passed=$PASSED" >> $GITHUB_OUTPUT
+            echo "failed=$FAILED" >> $GITHUB_OUTPUT
+            echo "total=$TOTAL" >> $GITHUB_OUTPUT
+            
+            echo "Tests - Passed: $PASSED, Failed: $FAILED, Total: $TOTAL"
+          else
+            echo "passed=0" >> $GITHUB_OUTPUT
+            echo "failed=0" >> $GITHUB_OUTPUT
+            echo "total=0" >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate summary
         if: always()
         run: |
-          echo "## Build & Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
           MERGED_XML=$(find ./coverage-html -name "Cobertura.xml" -type f | head -1)
+          PERCENTAGE="N/A"
           if [ -n "$MERGED_XML" ] && [ -f "$MERGED_XML" ]; then
             LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$MERGED_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
             PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
-            
-            COVERAGE_BADGE=$([ -n "$PERCENTAGE" ] && (( $(echo "$PERCENTAGE >= 90" | bc -l) )) && echo "" || \
-                            [ -n "$PERCENTAGE" ] && (( $(echo "$PERCENTAGE >= 75" | bc -l) )) && echo "" || \
-                            [ -n "$PERCENTAGE" ] && (( $(echo "$PERCENTAGE >= 50" | bc -l) )) && echo "" || "")
-            
-            echo "${COVERAGE_BADGE} **Code Coverage**: $PERCENTAGE%" >> $GITHUB_STEP_SUMMARY
-            echo "Threshold: $COVERAGE_THRESHOLD%" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
+          echo "## Build & Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Artifacts:" >> $GITHUB_STEP_SUMMARY
-          echo "- Test results" >> $GITHUB_STEP_SUMMARY
-          echo "- Coverage reports" >> $GITHUB_STEP_SUMMARY
-          echo "- Lambda package" >> $GITHUB_STEP_SUMMARY
-  
+          echo "**Coverage**: $PERCENTAGE%" >> $GITHUB_STEP_SUMMARY
+          echo "**Tests Passed**: ${{ steps.test-results.outputs.passed }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tests Failed**: ${{ steps.test-results.outputs.failed }}" >> $GITHUB_STEP_SUMMARY
+
   pr-comment:
     needs: build-test
     runs-on: ubuntu-latest
@@ -166,13 +176,13 @@ jobs:
         with:
           name: test-results-and-coverage
           path: ./test-results
-      
+
       - name: Generate coverage summary
         id: coverage
         run: |
           # Look for merged coverage XML first
           MERGED_XML=$(find ./test-results -name "Cobertura.xml" -type f | head -1)
-          
+
           if [ -n "$MERGED_XML" ] && [ -f "$MERGED_XML" ]; then
             echo "Using merged coverage XML: $MERGED_XML"
             COVERAGE_XML="$MERGED_XML"
@@ -180,7 +190,7 @@ jobs:
             COVERAGE_XML=$(find ./test-results -name "*.cobertura.xml" -type f | head -1)
             echo "Using individual coverage XML: $COVERAGE_XML"
           fi
-          
+
           if [ -n "$COVERAGE_XML" ] && [ -f "$COVERAGE_XML" ]; then
             LINE_RATE=$(grep -o 'line-rate="[0-9.]*"' "$COVERAGE_XML" | grep -o '[0-9.]*' | head -1 || echo "0")
             PERCENTAGE=$(awk "BEGIN {printf \"%.1f\", $LINE_RATE * 100}")
@@ -191,7 +201,7 @@ jobs:
             echo "coverage=N/A" >> $GITHUB_OUTPUT
             echo "Coverage report not found"
           fi
-      
+
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
@@ -200,22 +210,21 @@ jobs:
             const coverageValue = parseFloat(coverage);
             const isNumeric = !isNaN(coverageValue);
             const coverageBadge = !isNumeric ? '' : coverageValue >= 90 ? '[90%+]' : coverageValue >= 75 ? '[75-89%]' : coverageValue >= 50 ? '[50-74%]' : '[<50%]';
-            
+
             const message = `## Build & Test Successful
-            
+
             The Lambda package has been built and tested successfully for this PR.
-            
+
             ${coverageBadge} **Code Coverage**: ${isNumeric ? coverage + '%' : coverage}
-            
+
             Coverage reports are available in the workflow artifacts.
-            
+
             **Note**: Integration tests and deployment are required to pass before merging.
             `;
-            
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: message
             });
-

@@ -2,7 +2,6 @@ using FluentAssertions;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
 using Xunit;
-using Xunit;
 
 namespace ItemMaster.Infrastructure.Tests.Observability;
 
@@ -93,7 +92,7 @@ public class InMemoryMetricsServiceTests
         // Assert
         var metrics = _metricsService.GetMetrics();
         metrics.Should().HaveCount(1, scenario);
-        
+
         var metric = metrics.First();
         metric.Operation.Should().Be(operation, scenario);
         metric.Success.Should().Be(success, scenario);
@@ -174,7 +173,7 @@ public class InMemoryMetricsServiceTests
         // Assert
         var metrics = _metricsService.GetMetrics();
         metrics.Should().HaveCount(1, scenario);
-        
+
         var metric = metrics.First();
         metric.MetricName.Should().Be(metricName, scenario);
         metric.Value.Should().Be(value, scenario);
@@ -196,7 +195,7 @@ public class InMemoryMetricsServiceTests
         // Assert
         var metrics = _metricsService.GetMetrics();
         metrics.Should().HaveCount(1);
-        
+
         var metric = metrics.First();
         metric.Unit.Should().Be("Count");
     }
@@ -214,15 +213,13 @@ public class InMemoryMetricsServiceTests
 
         // Act
         foreach (var (operation, success, requestSource, itemCount, duration) in metrics)
-        {
             await _metricsService.RecordProcessingMetricAsync(
                 operation, success, requestSource, itemCount, duration);
-        }
 
         // Assert
         var recordedMetrics = _metricsService.GetMetrics();
         recordedMetrics.Should().HaveCount(3);
-        
+
         recordedMetrics.Should().Contain(m => m.Operation == "ProcessItems" && m.Success == true);
         recordedMetrics.Should().Contain(m => m.Operation == "ValidateItems" && m.Success == false);
         recordedMetrics.Should().Contain(m => m.Operation == "PublishItems" && m.Success == true);
@@ -234,14 +231,14 @@ public class InMemoryMetricsServiceTests
         // Arrange & Act
         await _metricsService.RecordProcessingMetricAsync(
             "ProcessItems", true, RequestSource.ApiGateway, 10, TimeSpan.FromMilliseconds(500));
-        
+
         await _metricsService.RecordCustomMetricAsync(
             "CustomCounter", 25.0, "Count", new Dictionary<string, string> { { "Type", "Test" } });
 
         // Assert
         var metrics = _metricsService.GetMetrics();
         metrics.Should().HaveCount(2);
-        
+
         metrics.Should().Contain(m => m.Operation == "ProcessItems");
         metrics.Should().Contain(m => m.MetricName == "CustomCounter");
     }
@@ -252,7 +249,7 @@ public class InMemoryMetricsServiceTests
         // Arrange
         _metricsService.RecordProcessingMetricAsync(
             "TestOperation", true, RequestSource.ApiGateway, 5, TimeSpan.FromMilliseconds(100));
-        
+
         _metricsService.RecordCustomMetricAsync("TestMetric", 10.0);
 
         // Act
@@ -275,19 +272,16 @@ public class InMemoryMetricsServiceTests
 
         // Assert
         metrics.Should().BeAssignableTo<IReadOnlyList<MetricRecord>>();
-        
+
         // Verify it's actually read-only by attempting to cast and modify
-        Action attemptModification = () =>
+        var attemptModification = () =>
         {
-            if (metrics is List<MetricRecord> list)
-            {
-                list.Add(new MetricRecord());
-            }
+            if (metrics is List<MetricRecord> list) list.Add(new MetricRecord());
         };
-        
+
         // This should not throw, but the original collection should remain unchanged
         attemptModification.Should().NotThrow();
-        
+
         // Verify original collection is protected
         var metricsAfter = _metricsService.GetMetrics();
         metricsAfter.Should().HaveCount(1); // Should still be 1, not 2
@@ -303,9 +297,9 @@ public class InMemoryMetricsServiceTests
         // Act & Assert
         var act = async () => await _metricsService.RecordProcessingMetricAsync(
             "TestOperation", true, RequestSource.ApiGateway, cancellationToken: cts.Token);
-        
+
         await act.Should().NotThrowAsync();
-        
+
         var metrics = _metricsService.GetMetrics();
         metrics.Should().HaveCount(1);
     }
@@ -320,9 +314,9 @@ public class InMemoryMetricsServiceTests
         // Act & Assert
         var act = async () => await _metricsService.RecordCustomMetricAsync(
             "TestMetric", 42.0, cancellationToken: cts.Token);
-        
+
         await act.Should().NotThrowAsync();
-        
+
         var metrics = _metricsService.GetMetrics();
         metrics.Should().HaveCount(1);
     }

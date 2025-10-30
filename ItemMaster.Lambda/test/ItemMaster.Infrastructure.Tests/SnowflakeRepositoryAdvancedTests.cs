@@ -1,12 +1,9 @@
+using Amazon.SecretsManager;
 using FluentAssertions;
-using ItemMaster.Domain;
-using ItemMaster.Infrastructure;
 using ItemMaster.Infrastructure.Secrets;
-using ItemMaster.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Snowflake.Data.Client;
 using Xunit;
 
 namespace ItemMaster.Infrastructure.Tests;
@@ -62,16 +59,13 @@ public class SnowflakeRepositoryAdvancedTests
             .Returns<IEnumerable<string>>(input =>
             {
                 var skuList = input.ToList();
-                if (skuList.Count == 0)
-                {
-                    return ($"SELECT * FROM TEST_DB.TEST_SCHEMA.ITEMS WHERE 1=0", null);
-                }
+                if (skuList.Count == 0) return ("SELECT * FROM TEST_DB.TEST_SCHEMA.ITEMS WHERE 1=0", null);
 
                 var sanitized = string.Join(",", skuList.Select(s => $"'{s}'"));
                 return ($"SELECT * FROM TEST_DB.TEST_SCHEMA.ITEMS WHERE SKU IN ({sanitized})", null);
             });
 
-        var mockSecretsManager = new Mock<Amazon.SecretsManager.IAmazonSecretsManager>();
+        var mockSecretsManager = new Mock<IAmazonSecretsManager>();
         var connectionProvider = new SnowflakeConnectionProvider(
             mockSecretsManager.Object,
             config.Object,
@@ -116,9 +110,10 @@ public class SnowflakeRepositoryAdvancedTests
 
         var mockQueryBuilder = new Mock<ISnowflakeItemQueryBuilder>();
         mockQueryBuilder.Setup(x => x.BuildSelectLatest(count))
-            .Returns($"SELECT * FROM TEST_DB.TEST_SCHEMA.ITEMS WHERE CREATED_AT_SNOWFLAKE IS NOT NULL ORDER BY CREATED_AT_SNOWFLAKE DESC LIMIT {count}");
+            .Returns(
+                $"SELECT * FROM TEST_DB.TEST_SCHEMA.ITEMS WHERE CREATED_AT_SNOWFLAKE IS NOT NULL ORDER BY CREATED_AT_SNOWFLAKE DESC LIMIT {count}");
 
-        var mockSecretsManager = new Mock<Amazon.SecretsManager.IAmazonSecretsManager>();
+        var mockSecretsManager = new Mock<IAmazonSecretsManager>();
         var connectionProvider = new SnowflakeConnectionProvider(
             mockSecretsManager.Object,
             config.Object,
@@ -144,7 +139,7 @@ public class SnowflakeRepositoryAdvancedTests
         config.Setup(x => x["snowflake:schema"]).Returns("TEST_SCHEMA");
         config.Setup(x => x["snowflake:warehouse"]).Returns("TEST_WAREHOUSE");
 
-        var mockSecretsManager = new Mock<Amazon.SecretsManager.IAmazonSecretsManager>();
+        var mockSecretsManager = new Mock<IAmazonSecretsManager>();
         var connectionProvider = new SnowflakeConnectionProvider(
             mockSecretsManager.Object,
             config.Object,
@@ -162,4 +157,3 @@ public class SnowflakeRepositoryAdvancedTests
         repository.Should().NotBeNull();
     }
 }
-

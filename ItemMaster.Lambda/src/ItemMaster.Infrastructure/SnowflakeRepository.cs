@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Dapper;
 using ItemMaster.Domain;
 using ItemMaster.Infrastructure.Secrets;
@@ -114,7 +115,7 @@ public class SnowflakeRepository : ISnowflakeRepository
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [ExcludeFromCodeCoverage]
     private async Task<SnowflakeDbConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {
         var cs = await _connProvider.GetConnectionStringAsync();

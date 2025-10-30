@@ -1,6 +1,5 @@
-using ItemMaster.Shared;
-
 using System.Diagnostics.CodeAnalysis;
+using ItemMaster.Shared;
 
 namespace ItemMaster.Infrastructure.Observability;
 

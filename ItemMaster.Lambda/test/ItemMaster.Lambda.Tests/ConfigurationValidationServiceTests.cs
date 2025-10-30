@@ -2,7 +2,6 @@ using FluentAssertions;
 using ItemMaster.Lambda.Configuration;
 using ItemMaster.Lambda.Services;
 using Microsoft.Extensions.Configuration;
-using Moq;
 using Xunit;
 
 namespace ItemMaster.Lambda.Tests;
@@ -162,7 +161,8 @@ public class ConfigurationValidationServiceTests
 
         foreach (var kvp in overrides) baseConfig[kvp.Key] = kvp.Value;
 
-        return new ConfigurationBuilder().AddInMemoryCollection(baseConfig.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value))).Build();
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(baseConfig.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)))
+            .Build();
     }
 }
-

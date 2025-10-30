@@ -1,11 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using ItemMaster.Application;
+using ItemMaster.Contracts;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
-using ItemMaster.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog.Context;
@@ -159,7 +159,8 @@ public class LambdaRequestHandler : ILambdaRequestHandler
 
             if (result.IsSuccess)
             {
-                logger.LogInformation("[EXECUTE] Lambda execution completed successfully | TraceId: {TraceId}", traceId);
+                logger.LogInformation("[EXECUTE] Lambda execution completed successfully | TraceId: {TraceId}",
+                    traceId);
                 return responseService.CreateSuccessResponse(result.Value, traceId);
             }
 

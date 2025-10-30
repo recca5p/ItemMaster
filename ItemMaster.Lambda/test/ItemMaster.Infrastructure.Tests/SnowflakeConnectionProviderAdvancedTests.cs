@@ -326,4 +326,3 @@ EXAMPLE_BASE64_ENCODED_KEY_HERE
         Environment.SetEnvironmentVariable("SSM_RSA_PATH", null);
     }
 }
-

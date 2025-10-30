@@ -1,10 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
 using Amazon.CloudWatch;
-using Amazon.CloudWatch.Model;
 using Amazon.Runtime;
 using Amazon.SecretsManager;
-using Amazon.SecretsManager.Model;
 using Amazon.SQS;
-using Amazon.SQS.Model;
 using ItemMaster.Application;
 using ItemMaster.Application.Services;
 using ItemMaster.Infrastructure;
@@ -17,7 +15,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics.CodeAnalysis;
 using Serilog;
 
 namespace ItemMaster.Lambda.Services;
@@ -96,14 +93,16 @@ public class DependencyInjectionService : IDependencyInjectionService
         var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
         var isIntegrationTestMode = !string.IsNullOrEmpty(mysqlHost);
 
-        Console.WriteLine($"[DI] Registering test mode services. Integration test mode: {isIntegrationTestMode}, MYSQL_HOST: {mysqlHost ?? "not set"}, AWS_ENDPOINT_URL: {Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL") ?? "not set"}, SQS_URL: {configuration[ConfigurationConstants.SQS_URL] ?? "not set"}");
+        Console.WriteLine(
+            $"[DI] Registering test mode services. Integration test mode: {isIntegrationTestMode}, MYSQL_HOST: {mysqlHost ?? "not set"}, AWS_ENDPOINT_URL: {Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL") ?? "not set"}, SQS_URL: {configuration[ConfigurationConstants.SQS_URL] ?? "not set"}");
 
         if (isIntegrationTestMode)
         {
             var mysqlDb = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "item_master";
             var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "im_user";
             var mysqlPass = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "im_pass";
-            var connectionString = $"Server={mysqlHost};Database={mysqlDb};User={mysqlUser};Password={mysqlPass};CharSet=utf8mb4;";
+            var connectionString =
+                $"Server={mysqlHost};Database={mysqlDb};User={mysqlUser};Password={mysqlPass};CharSet=utf8mb4;";
 
             services.AddDbContext<MySqlDbContext>(options =>
             {
@@ -116,7 +115,7 @@ public class DependencyInjectionService : IDependencyInjectionService
             {
                 // For LocalStack, use explicit credentials and don't set RegionEndpoint
                 // Setting RegionEndpoint with ServiceURL can cause credential validation issues
-                var credentials = new Amazon.Runtime.BasicAWSCredentials("test", "test");
+                var credentials = new BasicAWSCredentials("test", "test");
 
                 services.AddSingleton<IAmazonSecretsManager>(sp =>
                 {
@@ -160,7 +159,6 @@ public class DependencyInjectionService : IDependencyInjectionService
         }
 
         if (isIntegrationTestMode)
-        {
             services.AddScoped<SnowflakeConnectionProvider, MockSnowflakeConnectionProvider>(sp =>
             {
                 var secretsManager = sp.GetRequiredService<IAmazonSecretsManager>();
@@ -168,25 +166,18 @@ public class DependencyInjectionService : IDependencyInjectionService
                 var config = sp.GetRequiredService<IConfiguration>();
                 return new MockSnowflakeConnectionProvider(secretsManager, logger, config);
             });
-        }
         else
-        {
             // Unit test: Use production provider (but won't actually connect)
             services.AddScoped<SnowflakeConnectionProvider>();
-        }
 
         services.AddScoped<ISnowflakeConnectionProvider>(sp => sp.GetRequiredService<SnowflakeConnectionProvider>());
         services.AddScoped<ISnowflakeItemQueryBuilder, SnowflakeItemQueryBuilder>();
 
         if (isIntegrationTestMode)
-        {
             // Integration test: Use mock repository that returns test data without connecting to Snowflake
             services.AddScoped<ISnowflakeRepository, MockSnowflakeRepository>();
-        }
         else
-        {
             services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();
-        }
 
         ConfigureSqsOptions(services, configuration);
         var sqsUrl = configuration[ConfigurationConstants.SQS_URL];
@@ -241,10 +232,8 @@ public class DependencyInjectionService : IDependencyInjectionService
     {
         var queueUrl = configuration[ConfigurationConstants.SQS_URL];
         if (string.IsNullOrWhiteSpace(queueUrl))
-        {
             throw new InvalidOperationException(
                 $"SQS QueueUrl is required but not configured. Please set {ConfigurationConstants.SQS_URL} environment variable or configuration key (sqs__url).");
-        }
 
         services.Configure<SqsItemPublisherOptions>(opts =>
         {

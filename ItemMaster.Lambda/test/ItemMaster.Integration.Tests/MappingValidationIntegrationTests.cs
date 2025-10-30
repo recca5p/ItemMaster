@@ -1,7 +1,7 @@
-using Amazon.Lambda.APIGatewayEvents;
-using ItemMaster.Contracts;
 using System.Text.Json;
+using Amazon.Lambda.APIGatewayEvents;
 using FluentAssertions;
+using ItemMaster.Contracts;
 using Xunit;
 
 namespace ItemMaster.Integration.Tests;
@@ -49,14 +49,12 @@ public class MappingValidationIntegrationTests : IntegrationTestBase
         // Assert
         response.Should().NotBeNull();
         response.StatusCode.Should().Be(200);
-        
+
         var body = JsonSerializer.Deserialize<JsonElement>(response.Body);
         var data = body.GetProperty("data");
-        
+
         if (data.TryGetProperty("SkippedItems", out var skippedItems))
-        {
             skippedItems.GetArrayLength().Should().BeGreaterThan(0);
-        }
     }
 
     [Fact]
@@ -87,10 +85,10 @@ public class MappingValidationIntegrationTests : IntegrationTestBase
 
         // Assert
         response.StatusCode.Should().Be(200);
-        
+
         var body = JsonSerializer.Deserialize<JsonElement>(response.Body);
         var data = body.GetProperty("data");
-        
+
         if (data.TryGetProperty("SkippedItems", out var skipped))
         {
             var skippedArray = skipped.EnumerateArray().ToList();
@@ -115,16 +113,16 @@ public class MappingValidationIntegrationTests : IntegrationTestBase
 
         // Assert
         response.StatusCode.Should().Be(200);
-        
+
         var body = JsonSerializer.Deserialize<JsonElement>(response.Body);
         var data = body.GetProperty("data");
-        
+
         if (data.TryGetProperty("SkippedItems", out var skipped))
         {
             var errors = skipped.EnumerateArray()
                 .SelectMany(s => s.GetProperty("AllValidationErrors").EnumerateArray().Select(e => e.GetString()))
                 .ToList();
-            
+
             errors.Should().Contain(e => e != null && (e.Contains("FabricContent") || e.Contains("FabricComposition")));
         }
     }
@@ -143,4 +141,3 @@ public class MappingValidationIntegrationTests : IntegrationTestBase
         };
     }
 }
-

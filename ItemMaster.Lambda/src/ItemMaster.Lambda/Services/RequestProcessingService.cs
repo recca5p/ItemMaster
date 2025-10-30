@@ -114,9 +114,9 @@ public class RequestProcessingService : IRequestProcessingService
                 }
                 catch (JsonException jsonEx)
                 {
-                _logger.LogWarning("Invalid JSON format in request body | TraceId: {TraceId} | Error: {Error}",
-                    traceId, jsonEx.Message);
-                throw;
+                    _logger.LogWarning("Invalid JSON format in request body | TraceId: {TraceId} | Error: {Error}",
+                        traceId, jsonEx.Message);
+                    throw;
                 }
 
                 return JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, _jsonOptions)
@@ -144,9 +144,9 @@ public class RequestProcessingService : IRequestProcessingService
         }
         catch (JsonException jsonEx)
         {
-                _logger.LogWarning("Invalid JSON format in direct invocation request | TraceId: {TraceId} | Error: {Error}",
-                    traceId, jsonEx.Message);
-                throw;
+            _logger.LogWarning("Invalid JSON format in direct invocation request | TraceId: {TraceId} | Error: {Error}",
+                traceId, jsonEx.Message);
+            throw;
         }
 
         try

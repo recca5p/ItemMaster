@@ -9,7 +9,7 @@ public class SnowflakeDataHelper
     {
         return new List<Item>
         {
-            new Item
+            new()
             {
                 Sku = "TEST-SKU-001",
                 ProductTitle = "Test Product 1",
@@ -38,7 +38,7 @@ public class SnowflakeDataHelper
                 ProductImageUrlPos2 = "https://example.com/pos2.jpg",
                 ProductImageUrlPos3 = "https://example.com/pos3.jpg"
             },
-            new Item
+            new()
             {
                 Sku = "TEST-SKU-002",
                 ProductTitle = "Test Product 2",
@@ -75,4 +75,3 @@ public class SnowflakeDataHelper
         return Result<IEnumerable<Item>>.Success(CreateMockSnowflakeItems());
     }
 }
-

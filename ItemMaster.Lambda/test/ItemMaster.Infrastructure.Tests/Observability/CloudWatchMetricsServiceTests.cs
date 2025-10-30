@@ -9,8 +9,8 @@ namespace ItemMaster.Infrastructure.Tests.Observability;
 
 public class CloudWatchMetricsServiceTests
 {
-    private readonly Mock<IAmazonCloudWatch> _mockCloudWatch;
     private readonly CloudWatchMetricsService _metricsService;
+    private readonly Mock<IAmazonCloudWatch> _mockCloudWatch;
 
     public CloudWatchMetricsServiceTests()
     {
@@ -163,7 +163,7 @@ public class CloudWatchMetricsServiceTests
         // Act & Assert
         var act = async () => await _metricsService.RecordProcessingMetricAsync(
             "TestOperation", true, RequestSource.ApiGateway, cancellationToken: cts.Token);
-        
+
         await act.Should().NotThrowAsync();
     }
 
@@ -177,7 +177,7 @@ public class CloudWatchMetricsServiceTests
         // Act & Assert
         var act = async () => await _metricsService.RecordCustomMetricAsync(
             "TestMetric", 42.0, cancellationToken: cts.Token);
-        
+
         await act.Should().NotThrowAsync();
     }
 }

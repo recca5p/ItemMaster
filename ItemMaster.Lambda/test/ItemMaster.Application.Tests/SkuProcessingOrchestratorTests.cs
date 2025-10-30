@@ -13,12 +13,12 @@ namespace ItemMaster.Application.Tests;
 public class SkuProcessingOrchestratorTests
 {
     private readonly Mock<IItemFetchingService> _mockFetchingService;
-    private readonly Mock<IItemMappingService> _mockMappingService;
-    private readonly Mock<IItemPublishingService> _mockPublishingService;
-    private readonly Mock<ISkuAnalysisService> _mockSkuAnalysisService;
-    private readonly Mock<IProcessingResponseBuilder> _mockResponseBuilder;
-    private readonly Mock<IObservabilityService> _mockObservabilityService;
     private readonly Mock<ILogger<SkuProcessingOrchestrator>> _mockLogger;
+    private readonly Mock<IItemMappingService> _mockMappingService;
+    private readonly Mock<IObservabilityService> _mockObservabilityService;
+    private readonly Mock<IItemPublishingService> _mockPublishingService;
+    private readonly Mock<IProcessingResponseBuilder> _mockResponseBuilder;
+    private readonly Mock<ISkuAnalysisService> _mockSkuAnalysisService;
     private readonly SkuProcessingOrchestrator _orchestrator;
 
     public SkuProcessingOrchestratorTests()
@@ -47,12 +47,13 @@ public class SkuProcessingOrchestratorTests
         // Arrange
         var request = new ProcessSkusRequest();
         _mockObservabilityService.Setup(x => x.ExecuteWithObservabilityAsync(
-            It.IsAny<string>(),
-            It.IsAny<RequestSource>(),
-            It.IsAny<Func<Task<Result<ProcessSkusResponse>>>>(),
-            It.IsAny<Dictionary<string, object>>(),
-            It.IsAny<CancellationToken>()))
-            .Returns((string op, RequestSource src, Func<Task<Result<ProcessSkusResponse>>> fn, Dictionary<string, object> meta, CancellationToken ct) =>
+                It.IsAny<string>(),
+                It.IsAny<RequestSource>(),
+                It.IsAny<Func<Task<Result<ProcessSkusResponse>>>>(),
+                It.IsAny<Dictionary<string, object>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((string op, RequestSource src, Func<Task<Result<ProcessSkusResponse>>> fn,
+                Dictionary<string, object> meta, CancellationToken ct) =>
             {
                 return Task.FromResult(Result<ProcessSkusResponse>.Success(new ProcessSkusResponse
                 {
@@ -64,13 +65,14 @@ public class SkuProcessingOrchestratorTests
             });
 
         // Act
-        var result = await _orchestrator.ProcessSkusAsync(request, RequestSource.CicdHealthCheck, "trace-health", CancellationToken.None);
+        var result = await _orchestrator.ProcessSkusAsync(request, RequestSource.CicdHealthCheck, "trace-health",
+            CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
         result.Value!.ItemsProcessed.Should().Be(0);
-        
+
         _mockLogger.Verify(
             x => x.Log(
                 LogLevel.Information,
@@ -91,30 +93,41 @@ public class SkuProcessingOrchestratorTests
         var expectedResponse = new ProcessSkusResponse { Success = true };
 
         _mockObservabilityService.Setup(x => x.ExecuteWithObservabilityAsync(
-            It.IsAny<string>(),
-            It.IsAny<RequestSource>(),
-            It.IsAny<Func<Task<Result<ProcessSkusResponse>>>>(),
-            It.IsAny<Dictionary<string, object>>(),
-            It.IsAny<CancellationToken>()))
-            .Returns(async (string op, RequestSource src, Func<Task<Result<ProcessSkusResponse>>> fn, Dictionary<string, object> meta, CancellationToken ct) => await fn());
+                It.IsAny<string>(),
+                It.IsAny<RequestSource>(),
+                It.IsAny<Func<Task<Result<ProcessSkusResponse>>>>(),
+                It.IsAny<Dictionary<string, object>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(async (string op, RequestSource src, Func<Task<Result<ProcessSkusResponse>>> fn,
+                Dictionary<string, object> meta, CancellationToken ct) => await fn());
 
-        _mockFetchingService.Setup(x => x.FetchItemsBySkusAsync(It.IsAny<List<string>>(), It.IsAny<RequestSource>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _mockFetchingService.Setup(x => x.FetchItemsBySkusAsync(It.IsAny<List<string>>(), It.IsAny<RequestSource>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(items);
-        _mockMappingService.Setup(x => x.MapItemsAsync(It.IsAny<List<Item>>(), It.IsAny<RequestSource>(), It.IsAny<string>()))
+        _mockMappingService.Setup(x =>
+                x.MapItemsAsync(It.IsAny<List<Item>>(), It.IsAny<RequestSource>(), It.IsAny<string>()))
             .ReturnsAsync(mappingResult);
         _mockSkuAnalysisService.Setup(x => x.AnalyzeNotFoundSkus(It.IsAny<List<string>>(), It.IsAny<List<Item>>()))
             .Returns(new List<string>());
-        _mockResponseBuilder.Setup(x => x.CreateSuccessResponse(It.IsAny<List<Item>>(), It.IsAny<List<string>>(), It.IsAny<ItemMappingResult>()))
+        _mockResponseBuilder.Setup(x =>
+                x.CreateSuccessResponse(It.IsAny<List<Item>>(), It.IsAny<List<string>>(),
+                    It.IsAny<ItemMappingResult>()))
             .Returns(expectedResponse);
 
         // Act
-        var result = await _orchestrator.ProcessSkusAsync(request, RequestSource.ApiGateway, "trace-workflow", CancellationToken.None);
+        var result = await _orchestrator.ProcessSkusAsync(request, RequestSource.ApiGateway, "trace-workflow",
+            CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        _mockFetchingService.Verify(x => x.FetchItemsBySkusAsync(It.IsAny<List<string>>(), It.IsAny<RequestSource>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockMappingService.Verify(x => x.MapItemsAsync(It.IsAny<List<Item>>(), It.IsAny<RequestSource>(), It.IsAny<string>()), Times.Once);
-        _mockPublishingService.Verify(x => x.PublishItemsAsync(It.IsAny<List<UnifiedItemMaster>>(), It.IsAny<RequestSource>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockFetchingService.Verify(
+            x => x.FetchItemsBySkusAsync(It.IsAny<List<string>>(), It.IsAny<RequestSource>(), It.IsAny<string>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+        _mockMappingService.Verify(
+            x => x.MapItemsAsync(It.IsAny<List<Item>>(), It.IsAny<RequestSource>(), It.IsAny<string>()), Times.Once);
+        _mockPublishingService.Verify(
+            x => x.PublishItemsAsync(It.IsAny<List<UnifiedItemMaster>>(), It.IsAny<RequestSource>(), It.IsAny<string>(),
+                It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -127,28 +140,36 @@ public class SkuProcessingOrchestratorTests
         var expectedResponse = new ProcessSkusResponse { Success = true };
 
         _mockObservabilityService.Setup(x => x.ExecuteWithObservabilityAsync(
-            It.IsAny<string>(),
-            It.IsAny<RequestSource>(),
-            It.IsAny<Func<Task<Result<ProcessSkusResponse>>>>(),
-            It.IsAny<Dictionary<string, object>>(),
-            It.IsAny<CancellationToken>()))
-            .Returns(async (string op, RequestSource src, Func<Task<Result<ProcessSkusResponse>>> fn, Dictionary<string, object> meta, CancellationToken ct) => await fn());
+                It.IsAny<string>(),
+                It.IsAny<RequestSource>(),
+                It.IsAny<Func<Task<Result<ProcessSkusResponse>>>>(),
+                It.IsAny<Dictionary<string, object>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(async (string op, RequestSource src, Func<Task<Result<ProcessSkusResponse>>> fn,
+                Dictionary<string, object> meta, CancellationToken ct) => await fn());
 
-        _mockFetchingService.Setup(x => x.FetchLatestItemsAsync(It.IsAny<int>(), It.IsAny<RequestSource>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _mockFetchingService.Setup(x => x.FetchLatestItemsAsync(It.IsAny<int>(), It.IsAny<RequestSource>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(items);
-        _mockMappingService.Setup(x => x.MapItemsAsync(It.IsAny<List<Item>>(), It.IsAny<RequestSource>(), It.IsAny<string>()))
+        _mockMappingService.Setup(x =>
+                x.MapItemsAsync(It.IsAny<List<Item>>(), It.IsAny<RequestSource>(), It.IsAny<string>()))
             .ReturnsAsync(mappingResult);
         _mockSkuAnalysisService.Setup(x => x.AnalyzeNotFoundSkus(It.IsAny<List<string>>(), It.IsAny<List<Item>>()))
             .Returns(new List<string>());
-        _mockResponseBuilder.Setup(x => x.CreateSuccessResponse(It.IsAny<List<Item>>(), It.IsAny<List<string>>(), It.IsAny<ItemMappingResult>()))
+        _mockResponseBuilder.Setup(x =>
+                x.CreateSuccessResponse(It.IsAny<List<Item>>(), It.IsAny<List<string>>(),
+                    It.IsAny<ItemMappingResult>()))
             .Returns(expectedResponse);
 
         // Act
-        var result = await _orchestrator.ProcessSkusAsync(request, RequestSource.Sqs, "trace-latest", CancellationToken.None);
+        var result =
+            await _orchestrator.ProcessSkusAsync(request, RequestSource.Sqs, "trace-latest", CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        _mockFetchingService.Verify(x => x.FetchLatestItemsAsync(It.IsAny<int>(), It.IsAny<RequestSource>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockFetchingService.Verify(
+            x => x.FetchLatestItemsAsync(It.IsAny<int>(), It.IsAny<RequestSource>(), It.IsAny<string>(),
+                It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static List<Item> CreateTestItems(int count)
@@ -169,4 +190,3 @@ public class SkuProcessingOrchestratorTests
         }).ToList();
     }
 }
-

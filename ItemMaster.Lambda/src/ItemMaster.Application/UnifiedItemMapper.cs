@@ -108,28 +108,22 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         unifiedItem.Costs = new List<CostInfo>();
 
         if (item.Cost > 0)
-        {
             unifiedItem.Costs.Add(new CostInfo
             {
                 Type = "unit",
                 Currency = "USD",
                 Value = (decimal)item.Cost
             });
-        }
 
         if (item.LandedCost > 0)
-        {
             unifiedItem.Costs.Add(new CostInfo
             {
                 Type = "landed",
                 Currency = "USD",
                 Value = (decimal)item.LandedCost
             });
-        }
         else
-        {
             validationErrors.Add("Missing required LandedCost");
-        }
 
         unifiedItem.Categories = new List<CategoryInfo>();
         if (!string.IsNullOrWhiteSpace(item.Category))
@@ -189,7 +183,9 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         if (!string.IsNullOrWhiteSpace(item.Brand))
             unifiedItem.Attributes.Add(new AttributeInfo { Id = "brand_entity", Value = item.Brand });
 
-        var inventorySyncValue = string.IsNullOrWhiteSpace(item.InventorySyncFlag) ? InventorySyncDefault : item.InventorySyncFlag;
+        var inventorySyncValue = string.IsNullOrWhiteSpace(item.InventorySyncFlag)
+            ? InventorySyncDefault
+            : item.InventorySyncFlag;
         unifiedItem.Attributes.Add(new AttributeInfo { Id = "inventory_sync_enabled", Value = inventorySyncValue });
 
         unifiedItem.Links = new List<LinkInfo>();

@@ -2,8 +2,6 @@ using Amazon.SQS;
 using Amazon.SQS.Model;
 using FluentAssertions;
 using ItemMaster.Contracts;
-using ItemMaster.Infrastructure;
-using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -38,7 +36,6 @@ public class SqsItemPublisherRetryTests
             {
                 callCount++;
                 if (callCount == 1)
-                {
                     return new SendMessageBatchResponse
                     {
                         Successful = new List<SendMessageBatchResultEntry>
@@ -55,7 +52,6 @@ public class SqsItemPublisherRetryTests
                             }
                         }
                     };
-                }
 
                 return new SendMessageBatchResponse
                 {
@@ -168,7 +164,8 @@ public class SqsItemPublisherRetryTests
     [InlineData(11)]
     [InlineData(20)]
     [InlineData(30)]
-    public async Task PublishUnifiedItemsAsync_WithExactBatchBoundaries_ShouldCreateCorrectNumberOfBatches(int itemCount)
+    public async Task PublishUnifiedItemsAsync_WithExactBatchBoundaries_ShouldCreateCorrectNumberOfBatches(
+        int itemCount)
     {
         var mockSqsClient = new Mock<IAmazonSQS>();
         var mockLogger = new Mock<ILogger<SqsItemPublisher>>();
@@ -293,4 +290,3 @@ public class SqsItemPublisherRetryTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 }
-

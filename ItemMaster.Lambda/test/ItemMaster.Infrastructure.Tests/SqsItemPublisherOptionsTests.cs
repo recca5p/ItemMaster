@@ -1,5 +1,4 @@
 using FluentAssertions;
-using ItemMaster.Infrastructure;
 using Xunit;
 
 namespace ItemMaster.Infrastructure.Tests;

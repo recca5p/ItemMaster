@@ -2,21 +2,18 @@ using Amazon.SQS;
 using Amazon.SQS.Model;
 using FluentAssertions;
 using ItemMaster.Contracts;
-using ItemMaster.Infrastructure;
-using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using Xunit;
 using Xunit;
 
 namespace ItemMaster.Infrastructure.Tests;
 
 public class SqsItemPublisherTests
 {
-    private readonly Mock<IAmazonSQS> _mockSqsClient;
     private readonly Mock<ILogger<SqsItemPublisher>> _mockLogger;
     private readonly Mock<IOptions<SqsItemPublisherOptions>> _mockOptions;
+    private readonly Mock<IAmazonSQS> _mockSqsClient;
     private readonly SqsItemPublisherOptions _options;
     private readonly SqsItemPublisher _publisher;
 
@@ -25,7 +22,7 @@ public class SqsItemPublisherTests
         _mockSqsClient = new Mock<IAmazonSQS>();
         _mockLogger = new Mock<ILogger<SqsItemPublisher>>();
         _mockOptions = new Mock<IOptions<SqsItemPublisherOptions>>();
-        
+
         _options = new SqsItemPublisherOptions
         {
             QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/test-queue",
@@ -35,7 +32,7 @@ public class SqsItemPublisherTests
             CircuitBreakerSamplingDuration = 30,
             CircuitBreakerDurationOfBreak = TimeSpan.FromSeconds(60)
         };
-        
+
         _mockOptions.Setup(x => x.Value).Returns(_options);
         _publisher = new SqsItemPublisher(_mockSqsClient.Object, _mockOptions.Object, _mockLogger.Object);
     }
@@ -71,10 +68,10 @@ public class SqsItemPublisherTests
         // Test case 3: Large batch (more than 10 items)
         yield return new object[]
         {
-            Enumerable.Range(1, 25).Select(i => new UnifiedItemMaster 
-            { 
-                Sku = $"TEST-{i:D3}", 
-                Name = $"Test Item {i}" 
+            Enumerable.Range(1, 25).Select(i => new UnifiedItemMaster
+            {
+                Sku = $"TEST-{i:D3}",
+                Name = $"Test Item {i}"
             }).ToList(),
             25, // expected successful count
             0, // expected failed count
@@ -94,9 +91,9 @@ public class SqsItemPublisherTests
     [Theory]
     [MemberData(nameof(GetPublishUnifiedItemsTestData))]
     public async Task PublishUnifiedItemsAsync_WithValidItems_ShouldPublishSuccessfully(
-        List<UnifiedItemMaster> items, 
-        int expectedSuccessful, 
-        int expectedFailed, 
+        List<UnifiedItemMaster> items,
+        int expectedSuccessful,
+        int expectedFailed,
         bool shouldSucceed)
     {
         // Arrange
@@ -104,7 +101,7 @@ public class SqsItemPublisherTests
         var cancellationToken = CancellationToken.None;
 
         _mockSqsClient.Setup(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
+                It.IsAny<SendMessageBatchRequest>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SendMessageBatchResponse
             {
@@ -117,21 +114,15 @@ public class SqsItemPublisherTests
 
         // Assert
         if (shouldSucceed)
-        {
             result.IsSuccess.Should().BeTrue();
-        }
         else
-        {
             result.IsSuccess.Should().BeFalse();
-        }
 
         if (items.Any())
-        {
             _mockSqsClient.Verify(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
-                It.IsAny<CancellationToken>()), 
+                    It.IsAny<SendMessageBatchRequest>(),
+                    It.IsAny<CancellationToken>()),
                 Times.AtLeastOnce);
-        }
     }
 
     [Fact]
@@ -147,7 +138,7 @@ public class SqsItemPublisherTests
         var expectedException = new Exception("SQS service unavailable");
 
         _mockSqsClient.Setup(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
+                It.IsAny<SendMessageBatchRequest>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(expectedException);
 
@@ -172,13 +163,13 @@ public class SqsItemPublisherTests
         var cancellationToken = CancellationToken.None;
 
         _mockSqsClient.Setup(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
+                It.IsAny<SendMessageBatchRequest>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageBatchRequest request, CancellationToken _) =>
             {
                 var firstEntryId = request.Entries.First().Id;
                 var secondEntryId = request.Entries.Skip(1).First().Id;
-                
+
                 return new SendMessageBatchResponse
                 {
                     Successful = new List<SendMessageBatchResultEntry>
@@ -212,7 +203,7 @@ public class SqsItemPublisherTests
         var cancellationToken = new CancellationToken(true);
 
         _mockSqsClient.Setup(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
+                It.IsAny<SendMessageBatchRequest>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
 
@@ -236,7 +227,7 @@ public class SqsItemPublisherTests
         var cancellationToken = CancellationToken.None;
 
         _mockSqsClient.Setup(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
+                It.IsAny<SendMessageBatchRequest>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SendMessageBatchResponse
             {
@@ -270,7 +261,7 @@ public class SqsItemPublisherTests
         var cancellationToken = CancellationToken.None;
 
         _mockSqsClient.Setup(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
+                It.IsAny<SendMessageBatchRequest>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageBatchRequest request, CancellationToken _) =>
             {
@@ -286,15 +277,13 @@ public class SqsItemPublisherTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        
+
         // Verify correct number of batch calls (SQS batch size is max 10)
         var expectedBatches = (int)Math.Ceiling(itemCount / 10.0);
         if (itemCount > 0)
-        {
             _mockSqsClient.Verify(x => x.SendMessageBatchAsync(
-                It.IsAny<SendMessageBatchRequest>(), 
-                It.IsAny<CancellationToken>()), 
+                    It.IsAny<SendMessageBatchRequest>(),
+                    It.IsAny<CancellationToken>()),
                 Times.Exactly(expectedBatches));
-        }
     }
 }

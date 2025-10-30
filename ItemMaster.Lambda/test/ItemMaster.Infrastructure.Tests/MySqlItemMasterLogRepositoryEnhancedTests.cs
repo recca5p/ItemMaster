@@ -1,5 +1,5 @@
 using FluentAssertions;
-using ItemMaster.Infrastructure;
+using ItemMaster.Infrastructure.Ef;
 using ItemMaster.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -56,11 +56,11 @@ public class MySqlItemMasterLogRepositoryEnhancedTests
         bool shouldSucceed,
         string scenario)
     {
-        var options = new DbContextOptionsBuilder<ItemMaster.Infrastructure.Ef.MySqlDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+        var options = new DbContextOptionsBuilder<MySqlDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        var dbContext = new ItemMaster.Infrastructure.Ef.MySqlDbContext(options);
+        var dbContext = new MySqlDbContext(options);
         var mockClock = new Mock<IClock>();
         var mockLogger = new Mock<ILogger<MySqlItemMasterLogRepository>>();
 
@@ -81,11 +81,11 @@ public class MySqlItemMasterLogRepositoryEnhancedTests
     [Fact]
     public async Task LogItemSourceAsync_WithCancellation_ShouldRespectCancellation()
     {
-        var options = new DbContextOptionsBuilder<ItemMaster.Infrastructure.Ef.MySqlDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+        var options = new DbContextOptionsBuilder<MySqlDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        var dbContext = new ItemMaster.Infrastructure.Ef.MySqlDbContext(options);
+        var dbContext = new MySqlDbContext(options);
         var mockClock = new Mock<IClock>();
         var mockLogger = new Mock<ILogger<MySqlItemMasterLogRepository>>();
 
@@ -113,11 +113,11 @@ public class MySqlItemMasterLogRepositoryEnhancedTests
     [Fact]
     public async Task LogItemSourceAsync_WithMultipleLogs_ShouldLogAllSuccessfully()
     {
-        var options = new DbContextOptionsBuilder<ItemMaster.Infrastructure.Ef.MySqlDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+        var options = new DbContextOptionsBuilder<MySqlDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        var dbContext = new ItemMaster.Infrastructure.Ef.MySqlDbContext(options);
+        var dbContext = new MySqlDbContext(options);
         var mockClock = new Mock<IClock>();
         var mockLogger = new Mock<ILogger<MySqlItemMasterLogRepository>>();
 
@@ -154,10 +154,10 @@ public class MySqlItemMasterLogRepositoryEnhancedTests
         var now = DateTime.UtcNow;
         mockClock.Setup(x => x.UtcNow).Returns(now);
 
-        var options = new DbContextOptionsBuilder<ItemMaster.Infrastructure.Ef.MySqlDbContext>()
+        var options = new DbContextOptionsBuilder<MySqlDbContext>()
             .Options;
 
-        var dbContext = new ItemMaster.Infrastructure.Ef.MySqlDbContext(options);
+        var dbContext = new MySqlDbContext(options);
 
         var repository = new MySqlItemMasterLogRepository(dbContext, mockClock.Object, mockLogger.Object);
 
@@ -185,11 +185,11 @@ public class MySqlItemMasterLogRepositoryEnhancedTests
     [Fact]
     public async Task LogItemSourceAsync_ShouldSetCreatedAtTimestamp()
     {
-        var options = new DbContextOptionsBuilder<ItemMaster.Infrastructure.Ef.MySqlDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+        var options = new DbContextOptionsBuilder<MySqlDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        var dbContext = new ItemMaster.Infrastructure.Ef.MySqlDbContext(options);
+        var dbContext = new MySqlDbContext(options);
         var mockClock = new Mock<IClock>();
         var mockLogger = new Mock<ILogger<MySqlItemMasterLogRepository>>();
 
@@ -210,4 +210,3 @@ public class MySqlItemMasterLogRepositoryEnhancedTests
         log.CreatedAt.Should().Be(specificTime);
     }
 }
-

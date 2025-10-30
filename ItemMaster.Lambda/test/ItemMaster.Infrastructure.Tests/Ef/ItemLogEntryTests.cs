@@ -1,7 +1,6 @@
 using FluentAssertions;
 using ItemMaster.Infrastructure.Ef;
 using Xunit;
-using Xunit;
 
 namespace ItemMaster.Infrastructure.Tests.Ef;
 
@@ -83,7 +82,7 @@ public class ItemLogEntryTests
         entry.Sku.Should().Be(string.Empty);
         entry.Source.Should().Be(string.Empty);
         entry.RequestId.Should().Be(string.Empty);
-        entry.TimestampUtc.Should().Be(default(DateTime));
+        entry.TimestampUtc.Should().Be(default);
     }
 
     [Theory]

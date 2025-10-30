@@ -2,8 +2,6 @@ using FluentAssertions;
 using ItemMaster.Application.Services;
 using ItemMaster.Contracts;
 using ItemMaster.Domain;
-using ItemMaster.Infrastructure.Observability;
-using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -174,4 +172,3 @@ public class SkuAnalysisServiceTests
         }).ToList();
     }
 }
-

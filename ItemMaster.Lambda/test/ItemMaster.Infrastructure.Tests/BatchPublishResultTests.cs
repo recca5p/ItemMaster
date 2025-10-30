@@ -1,7 +1,5 @@
 using Amazon.SQS.Model;
 using FluentAssertions;
-using ItemMaster.Infrastructure;
-using Xunit;
 using Xunit;
 
 namespace ItemMaster.Infrastructure.Tests;
@@ -152,30 +150,26 @@ public class BatchPublishResultTests
     [InlineData(0, 3, true)]
     [InlineData(2, 1, true)]
     public void BatchPublishResult_HasFailures_ShouldReturnCorrectValue(
-        int successfulCount, 
-        int failedCount, 
+        int successfulCount,
+        int failedCount,
         bool expectedHasFailures)
     {
         // Arrange
         var result = new BatchPublishResult();
-        
-        for (int i = 0; i < successfulCount; i++)
-        {
-            result.SuccessfulMessages.Add(new SendMessageBatchRequestEntry 
-            { 
-                Id = $"success{i}", 
-                MessageBody = $"body{i}" 
+
+        for (var i = 0; i < successfulCount; i++)
+            result.SuccessfulMessages.Add(new SendMessageBatchRequestEntry
+            {
+                Id = $"success{i}",
+                MessageBody = $"body{i}"
             });
-        }
-        
-        for (int i = 0; i < failedCount; i++)
-        {
-            result.FailedMessages.Add(new SendMessageBatchRequestEntry 
-            { 
-                Id = $"failed{i}", 
-                MessageBody = $"body{i}" 
+
+        for (var i = 0; i < failedCount; i++)
+            result.FailedMessages.Add(new SendMessageBatchRequestEntry
+            {
+                Id = $"failed{i}",
+                MessageBody = $"body{i}"
             });
-        }
 
         // Act
         var hasFailures = result.FailedMessages.Any() || result.CircuitBreakerTripped || result.Exception != null;

@@ -1,10 +1,9 @@
+using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using FluentAssertions;
 using ItemMaster.Contracts;
 using ItemMaster.Infrastructure.Ef;
-using ItemMaster.Shared;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 using Xunit;
 
 namespace ItemMaster.Integration.Tests;
@@ -82,10 +81,7 @@ public class DatabaseLoggingIntegrationTests : IntegrationTestBase
         var log = await dbContext.ItemMasterSourceLogs
             .FirstOrDefaultAsync(l => l.Sku == sku);
 
-        if (log != null && log.ValidationStatus == "invalid")
-        {
-            log.Errors.Should().NotBeNullOrEmpty();
-        }
+        if (log != null && log.ValidationStatus == "invalid") log.Errors.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -165,4 +161,3 @@ public class DatabaseLoggingIntegrationTests : IntegrationTestBase
         return new MySqlDbContext(optionsBuilder.Options);
     }
 }
-

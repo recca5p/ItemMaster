@@ -2,7 +2,6 @@ using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using FluentAssertions;
 using ItemMaster.Infrastructure.Secrets;
-using ItemMaster.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -156,7 +155,8 @@ public class SecretsAwareMySqlConnectionStringProviderTests
 
         mockConfig.Setup(x => x["mysql:host"]).Returns("ap-southeast-1.amazonaws.com");
         mockConfig.Setup(x => x["mysql:db"]).Returns("itemmaster");
-        mockConfig.Setup(x => x["mysql:secret_arn"]).Returns("arn:aws:secretsmanager:ap-southeast-1:123456789:secret:mysql");
+        mockConfig.Setup(x => x["mysql:secret_arn"])
+            .Returns("arn:aws:secretsmanager:ap-southeast-1:123456789:secret:mysql");
 
         mockSecretsManager.Setup(x => x.GetSecretValueAsync(
                 It.IsAny<GetSecretValueRequest>(),
@@ -204,7 +204,8 @@ public class SecretsAwareMySqlConnectionStringProviderTests
 
         mockConfig.Setup(x => x["mysql:host"]).Returns("ap-southeast-1.amazonaws.com");
         mockConfig.Setup(x => x["mysql:db"]).Returns("itemmaster");
-        mockConfig.Setup(x => x["mysql:secret_arn"]).Returns("arn:aws:secretsmanager:ap-southeast-1:123456789:secret:mysql");
+        mockConfig.Setup(x => x["mysql:secret_arn"])
+            .Returns("arn:aws:secretsmanager:ap-southeast-1:123456789:secret:mysql");
 
         mockSecretsManager.Setup(x => x.GetSecretValueAsync(
                 It.IsAny<GetSecretValueRequest>(),
@@ -231,4 +232,3 @@ public class SecretsAwareMySqlConnectionStringProviderTests
             Times.AtLeastOnce);
     }
 }
-

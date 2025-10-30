@@ -1,8 +1,7 @@
-using Amazon.Lambda.APIGatewayEvents;
-using Amazon.SQS.Model;
-using ItemMaster.Contracts;
 using System.Text.Json;
+using Amazon.Lambda.APIGatewayEvents;
 using FluentAssertions;
+using ItemMaster.Contracts;
 using Xunit;
 
 namespace ItemMaster.Integration.Tests;
@@ -58,17 +57,14 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
         // Assert
         await Task.Delay(2000);
 
-        var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!, 10);
+        var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!);
         messages.Should().NotBeEmpty();
 
         var firstMessage = messages[0];
         var body = JsonDocument.Parse(firstMessage.Body);
 
         body.RootElement.TryGetProperty("Sku", out var skuElement);
-        if (skuElement.ValueKind != JsonValueKind.Undefined)
-        {
-            skuElement.GetString().Should().NotBeNullOrEmpty();
-        }
+        if (skuElement.ValueKind != JsonValueKind.Undefined) skuElement.GetString().Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -90,7 +86,7 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
         // Assert
         await Task.Delay(3000);
 
-        var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!, 10);
+        var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!);
         messages.Count.Should().BeGreaterOrEqualTo(3);
     }
 
@@ -112,10 +108,7 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
 
         var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!);
 
-        if (messages.Count == 0)
-        {
-            messages.Should().BeEmpty();
-        }
+        if (messages.Count == 0) messages.Should().BeEmpty();
     }
 
     [Fact]
@@ -137,7 +130,7 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
         // Assert
         await Task.Delay(2000);
 
-        var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!, 10);
+        var messages = await LocalStack.ReceiveMessagesAsync(SqsClient, TestQueueUrl!);
 
         if (messages.Count >= 2)
         {
@@ -160,4 +153,3 @@ public class SqsPublishingIntegrationTests : IntegrationTestBase
         };
     }
 }
-

@@ -2,7 +2,6 @@ using FluentAssertions;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
 using Xunit;
-using Xunit;
 
 namespace ItemMaster.Infrastructure.Tests.Observability;
 
@@ -106,14 +105,14 @@ public class MetricRecordTests
         // Assert
         record.Operation.Should().BeNull();
         record.Success.Should().BeFalse();
-        record.RequestSource.Should().Be(default(RequestSource));
+        record.RequestSource.Should().Be(default);
         record.ItemCount.Should().BeNull();
         record.Duration.Should().BeNull();
         record.MetricName.Should().BeNull();
         record.Value.Should().Be(0.0);
         record.Unit.Should().BeNull();
         record.Dimensions.Should().BeNull();
-        record.Timestamp.Should().Be(default(DateTime));
+        record.Timestamp.Should().Be(default);
     }
 
     [Theory]
