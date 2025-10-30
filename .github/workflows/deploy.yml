@@ -207,23 +207,36 @@ jobs:
         run: |
           echo "Deploying Lambda function..."
 
-          aws lambda update-function-code \
+          DEPLOY_RESPONSE=$(aws lambda update-function-code \
             --function-name "$LAMBDA_FUNCTION_NAME" \
             --zip-file fileb://function.zip \
             --publish \
-            --region $AWS_REGION
+            --region $AWS_REGION)
 
           aws lambda wait function-updated \
             --function-name "$LAMBDA_FUNCTION_NAME" \
             --region $AWS_REGION
 
-          FUNCTION_VERSION=$(aws lambda list-versions-by-function \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --query 'Versions[-1].Version' \
-            --output text \
-            --region $AWS_REGION)
+          FUNCTION_VERSION=$(echo "$DEPLOY_RESPONSE" | jq -r '.Version' 2>/dev/null | tr -d '\n\r\t' | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')
 
-          echo "version=$FUNCTION_VERSION" >> $GITHUB_OUTPUT
+          if [ -z "$FUNCTION_VERSION" ] || [ "$FUNCTION_VERSION" = "None" ] || [ "$FUNCTION_VERSION" = "null" ]; then
+            FUNCTION_VERSION=$(aws lambda get-function \
+              --function-name "$LAMBDA_FUNCTION_NAME" \
+              --query 'Configuration.Version' \
+              --output text \
+              --region $AWS_REGION | tr -d '\n\r\t' | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')
+          fi
+
+          if [ -z "$FUNCTION_VERSION" ] || [ "$FUNCTION_VERSION" = "None" ] || [ "$FUNCTION_VERSION" = "null" ]; then
+            echo "ERROR: Could not determine function version"
+            exit 1
+          fi
+
+          {
+            echo "version<<EOF"
+            echo "$FUNCTION_VERSION"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
           echo "Lambda deployed successfully (Version: $FUNCTION_VERSION)"
 
       - name: Health check
