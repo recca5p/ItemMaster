@@ -412,9 +412,9 @@ referenced via `SSM_RSA_PATH` (secret name/ARN).
 The `item_master_source_log` table tracks every item processed:
 
 - **Sku**: Item identifier
-- **SourceModel**: Original data from Snowflake (JSON)
+- **SourceModel**: Original data from Snowflake
 - **ValidationStatus**: "valid" or "invalid"
-- **CommonModel**: Mapped unified item model (JSON, null if validation failed)
+- **CommonModel**: Mapped unified item model (null if validation failed)
 - **Errors**: Validation error messages or warnings about skipped properties
 - **IsSentToSqs**: Boolean flag indicating successful SQS delivery
 - **CreatedAt**: Timestamp of processing
@@ -513,13 +513,6 @@ Integration tests verify end-to-end functionality with real services running in 
 - .NET 8 SDK
 
 #### Run Integration Tests Locally
-
-```bash
-# Use the provided script to run integration tests
-./scripts/run-integration-tests-local.sh
-```
-
-Or manually:
 
 ```bash
 # Start services (MySQL and LocalStack)
@@ -663,6 +656,30 @@ The deployment pipeline consists of three coordinated workflows:
 - Updates `LIVE` alias to previous version if exists
 - Or redeploys previous code if no alias exists
 - Exits with error if rollback fails
+
+### Automation Tests (Postman/Newman)
+
+Status: In development; this section will be available soon.
+
+Automation tests validate the end-to-end API behavior immediately after each deployment to the Development environment. The flow is:
+
+1. Deploy the latest build to Development
+2. Run API automation via a Postman collection using Newman
+3. Parse results; on any failure → rollback the deployment
+
+What we run:
+- A curated Postman collection covering critical API paths (happy paths, validation errors, edge cases)
+- An environment file pointing to the Development API base URL and credentials
+- Pre-request and test scripts inside the collection for data setup, assertions, and cleanup
+
+CI/CD integration (concept):
+- Step 1 (Deploy): Update Lambda and wait until active
+- Step 2 (Run Newman): Execute collection against Dev, export results (JUnit/CLI)
+- Step 3 (Gate): If Newman exit code != 0 or failures > 0 → trigger rollback step and fail the job
+- Step 4 (Summary): Attach results to the workflow summary and artifacts
+
+Rollback condition:
+- Any failed test in the collection triggers the same rollback mechanism used by the health check.
 
 **Key Features:**
 - Both test pipelines must pass before deployment
