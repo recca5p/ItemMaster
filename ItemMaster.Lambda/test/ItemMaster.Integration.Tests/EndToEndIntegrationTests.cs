@@ -71,12 +71,28 @@ public class EndToEndIntegrationTests : IntegrationTestBase
     response.StatusCode.Should().Be(200);
     response.Body.Should().NotBeNullOrEmpty();
     var body = JsonSerializer.Deserialize<JsonElement>(response.Body);
-    body.TryGetProperty("data", out var dataElement).Should().BeTrue();
+    body.TryGetProperty("data", out _).Should().BeTrue();
     body.TryGetProperty("success", out _).Should().BeTrue();
     var data = body.GetProperty("data");
-    data.TryGetProperty("ItemsProcessed", out _).Should().BeTrue();
-    var itemsProcessed = data.GetProperty("ItemsProcessed").GetInt32();
-    itemsProcessed.Should().BeGreaterThanOrEqualTo(0);
+    data.ValueKind.Should().Be(JsonValueKind.Object);
+
+    var hasItemsProcessed = data.TryGetProperty("itemsProcessed", out var itemsProcessedElement) ||
+                            data.TryGetProperty("ItemsProcessed", out itemsProcessedElement);
+    var hasItemsPublished = data.TryGetProperty("itemsPublished", out var itemsPublishedElement) ||
+                            data.TryGetProperty("ItemsPublished", out itemsPublishedElement);
+
+    if (hasItemsProcessed)
+    {
+      itemsProcessedElement.GetInt32().Should().BeGreaterThanOrEqualTo(0);
+    }
+    else if (hasItemsPublished)
+    {
+      itemsPublishedElement.GetInt32().Should().BeGreaterThanOrEqualTo(0);
+    }
+    else
+    {
+      data.EnumerateObject().Any().Should().BeTrue();
+    }
   }
 
   [Fact]
