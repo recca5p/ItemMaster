@@ -17,7 +17,6 @@ data through AWS Lambda. The solution integrates with Snowflake for data retriev
 - [Running & Testing](#running--testing)
 - [Deployment](#deployment)
 - [Credentials & Access](#credentials--access)
-- [Regenerating Diagrams](#regenerating-diagrams)
 
 ---
 
@@ -30,14 +29,19 @@ data through AWS Lambda. The solution integrates with Snowflake for data retriev
 The ItemMaster solution follows Clean Architecture with clear separation of concerns across multiple layers:
 
 ```
-ItemMaster/
-├── ItemMaster.Lambda/           # AWS Lambda entry point
-├── ItemMaster.Application/      # Application/Use Case layer
-├── ItemMaster.Domain/           # Domain entities
-├── ItemMaster.Infrastructure/   # External integrations
-├── ItemMaster.Shared/          # Cross-cutting concerns
-├── ItemMaster.Contracts/       # DTOs and contracts
-└── ItemMaster.Lambda.Tests/    # Unit tests
+ItemMaster.Lambda/
+├── src/
+│   ├── ItemMaster.Lambda/           # AWS Lambda entry point
+│   ├── ItemMaster.Application/      # Application/Use Case layer
+│   ├── ItemMaster.Domain/           # Domain entities
+│   ├── ItemMaster.Infrastructure/   # External integrations
+│   ├── ItemMaster.Shared/          # Cross-cutting concerns
+│   └── ItemMaster.Contracts/       # DTOs and contracts
+└── test/
+    ├── ItemMaster.Lambda.Tests/     # Lambda layer unit tests
+    ├── ItemMaster.Application.Tests/ # Application layer unit tests
+    ├── ItemMaster.Infrastructure.Tests/ # Infrastructure layer unit tests
+    └── ItemMaster.Integration.Tests/ # End-to-end integration tests
 ```
 
 **Design Principles:**
@@ -85,7 +89,7 @@ ItemMaster/
 
 ---
 
-## 🎯 Key Features
+## Key Features
 
 - **Clean Architecture**: Clear separation of concerns with dependency inversion
 - **Serverless**: AWS Lambda with .NET 8 runtime and ARM64 architecture
@@ -101,7 +105,7 @@ ItemMaster/
 
 ---
 
-## 🌐 AWS Infrastructure
+## AWS Infrastructure
 
 ### System Architecture
 
@@ -131,7 +135,7 @@ The complete AWS infrastructure includes:
 
 ---
 
-## 📊 Data Flow & Processing
+## Data Flow & Processing
 
 ### Processing Workflow
 
@@ -185,7 +189,7 @@ The data flow demonstrates three request sources:
 
 ---
 
-## ⚡ Error Handling & Resilience
+## Error Handling & Resilience
 
 ![Error Handling and Resilience](docs/error-handling-resilience.png)
 
@@ -221,7 +225,7 @@ The data flow demonstrates three request sources:
 
 ---
 
-## 🏃‍♂️ Lambda Initialization
+## Lambda Initialization
 
 ![Lambda Initialization](docs/lambda-initialization.png)
 
@@ -253,7 +257,7 @@ When `ITEMMASTER_TEST_MODE=true`:
 
 ---
 
-## 🔧 AWS Configuration Settings
+## AWS Configuration Settings
 
 ### Lambda Function Configuration
 
@@ -408,9 +412,9 @@ referenced via `SSM_RSA_PATH` (secret name/ARN).
 The `item_master_source_log` table tracks every item processed:
 
 - **Sku**: Item identifier
-- **SourceModel**: Original data from Snowflake (JSON)
+- **SourceModel**: Original data from Snowflake
 - **ValidationStatus**: "valid" or "invalid"
-- **CommonModel**: Mapped unified item model (JSON, null if validation failed)
+- **CommonModel**: Mapped unified item model (null if validation failed)
 - **Errors**: Validation error messages or warnings about skipped properties
 - **IsSentToSqs**: Boolean flag indicating successful SQS delivery
 - **CreatedAt**: Timestamp of processing
@@ -456,18 +460,92 @@ The `item_master_source_log` table tracks every item processed:
 
 ## Running & Testing
 
+### Testing Strategy
+
+The solution follows a comprehensive testing strategy with unit tests and integration tests:
+
+1. **Unit Tests**: Fast, isolated tests using mocks and in-memory dependencies
+   - Table-driven test structure (AAA pattern)
+   - Mocks for all external services
+   - Deterministic and self-contained
+   
+2. **Integration Tests**: End-to-end tests with real infrastructure
+   - Docker services (MySQL, LocalStack for AWS)
+   - Full database migrations
+   - Real SQS publishing and logging
+
 ### Unit Tests
 
+#### Run All Unit Tests
+
 ```bash
-# Run all tests
-dotnet test
+# Run all unit tests (excludes integration tests)
+dotnet test --filter "Category!=Integration"
 
-# Run tests with coverage
-dotnet test --collect:"XPlat Code Coverage"
-
-# Run specific test project
-dotnet test ItemMaster.Lambda/test/ItemMaster.Lambda.Tests/
+# Run with code coverage
+dotnet test --collect:"XPlat Code Coverage" --filter "Category!=Integration"
 ```
+
+#### Run Tests by Layer
+
+```bash
+# Lambda layer tests
+dotnet test ItemMaster.Lambda/test/ItemMaster.Lambda.Tests/
+
+# Application layer tests
+dotnet test ItemMaster.Lambda/test/ItemMaster.Application.Tests/
+
+# Infrastructure layer tests
+dotnet test ItemMaster.Lambda/test/ItemMaster.Infrastructure.Tests/
+```
+
+#### Test Coverage
+
+The build pipeline enforces a **minimum 80% code coverage threshold**. Coverage reports are generated in HTML and Cobertura XML formats.
+
+### Integration Tests
+
+Integration tests verify end-to-end functionality with real services running in Docker containers.
+
+#### Prerequisites
+
+- Docker installed and running
+- .NET 8 SDK
+
+#### Run Integration Tests Locally
+
+```bash
+# Start services (MySQL and LocalStack)
+docker-compose up -d
+
+# Wait for services to be ready, then run tests
+dotnet test --filter "Category=Integration"
+```
+
+#### Integration Test Setup
+
+The integration tests use:
+
+- **MySQL 8.0**: Real database with EF Core migrations
+- **LocalStack**: AWS service emulator (SQS, Secrets Manager, CloudWatch)
+- **Mock Snowflake Repository**: Simulates Snowflake data queries
+- **Test Data**: Seeded via `DatabaseSeeder` and `SnowflakeDataHelper`
+
+#### Test Categories
+
+- **End-to-End Tests**: Full Lambda function invocation with all services
+- **Database Logging Tests**: Verify MySQL audit logging
+- **SQS Publishing Tests**: Real LocalStack SQS queue operations
+- **Mapping Validation Tests**: Integration-level validation and mapping
+
+#### CI/CD Integration
+
+Integration tests automatically run on:
+- Push to `master` branch
+- Pull requests to `master`
+- Manual workflow dispatch
+
+In CI/CD, services are managed via GitHub Actions service containers.
 
 ### Local Lambda Testing
 
@@ -504,37 +582,125 @@ dotnet lambda invoke-function FunctionHandler --payload '{"source":"aws.events",
 
 ## Deployment
 
-### CI/CD with GitHub Actions
+### CI/CD Pipeline Architecture
 
-The deployment is fully automated using GitHub Actions:
+![CI/CD Pipeline](docs/cicd-pipeline.png)
 
-**Deployment Triggers:**
+The deployment pipeline consists of three coordinated workflows:
 
-- Push to `main` branch → Auto-deploy
-- Manual workflow dispatch
-- Release tag creation
+#### 1. Build & Test Pipeline (`build-test.yml`)
 
-**GitHub Actions Workflow:**
+**Triggers:**
+- Push to `master` branch
+- Pull requests to `master`
+- Manual workflow dispatch (for deploy workflow)
 
+**Steps:**
 1. Checkout code
-2. Setup .NET 8 SDK (ARM64)
-3. Restore NuGet packages
-4. Build solution
-5. Run unit tests
-6. Package Lambda function (ZIP)
-7. Deploy to AWS Lambda via AWS CLI
-8. Run health check
-9. Post-deployment validation
+2. Setup .NET 8 SDK
+3. Restore dependencies
+4. Build solution (Release configuration)
+5. Run unit tests (excludes integration tests)
+6. Generate code coverage report
+7. **Validate coverage >= 80%** (fails if below threshold)
+8. **Validate all tests passed** (fails if any test fails)
+9. Publish Lambda package (linux-arm64 architecture)
+10. Upload artifacts (coverage reports, Lambda package, test results)
 
-### Environment Promotion
+**Output:**
+- Coverage percentage and pass/fail counts in summary
+- Lambda package artifact (`lambda-package.zip`)
+- Test results and coverage reports
 
-- **Development**: Auto-deploy on push to `develop`
-- **Staging**: Manual approval required
-- **Production**: Manual approval + change request
+#### 2. Integration Tests Pipeline (`integration-tests.yml`)
+
+**Triggers:**
+- Push to `master` branch
+- Pull requests to `master`
+- Manual workflow dispatch (for deploy workflow)
+
+**Steps:**
+1. Checkout code
+2. Start MySQL service container (Docker)
+3. Start LocalStack service container (Docker)
+4. Setup .NET 8 SDK
+5. Create SQS queue in LocalStack
+6. Create secrets in LocalStack (MySQL, Snowflake)
+7. Restore dependencies
+8. Build integration tests
+9. Apply EF Core database migrations
+10. Wait for MySQL and LocalStack to be ready
+11. Run integration tests (Category=Integration)
+12. Upload test results
+
+**Infrastructure:**
+- MySQL 8.0 container for audit logging
+- LocalStack container emulating AWS services (SQS, Secrets Manager, CloudWatch)
+
+#### 3. Deploy Pipeline (`deploy.yml`)
+
+**Triggers:**
+- Manual workflow dispatch only
+
+**Workflow:**
+1. **Trigger Build-Test workflow** → Wait for completion
+2. **Trigger Integration-Tests workflow** → Wait for completion
+3. Download Lambda package from Build-Test workflow
+4. Configure AWS credentials (OIDC)
+5. Get previous Lambda version (for rollback)
+6. Deploy Lambda function (update function code + publish)
+7. **Health check** on deployed Lambda
+8. **Rollback on failure**: If health check fails, automatically rollback to previous version
+
+**Rollback Mechanism:**
+- Updates `LIVE` alias to previous version if exists
+- Or redeploys previous code if no alias exists
+- Exits with error if rollback fails
+
+### Automation Tests (Postman/Newman)
+
+**TODO:** This section is under development and will be available soon.
+
+Automation tests validate the end-to-end API behavior immediately after each deployment to the Development environment. The flow is:
+
+1. Deploy the latest build to Development
+2. Run API automation via a Postman collection using Newman
+3. Parse results; on any failure → rollback the deployment
+
+What we run:
+- A curated Postman collection covering critical API paths (happy paths, validation errors, edge cases)
+- An environment file pointing to the Development API base URL and credentials
+- Pre-request and test scripts inside the collection for data setup, assertions, and cleanup
+
+CI/CD integration (concept):
+- Step 1 (Deploy): Update Lambda and wait until active
+- Step 2 (Run Newman): Execute collection against Dev, export results (JUnit/CLI)
+- Step 3 (Gate): If Newman exit code != 0 or failures > 0 → trigger rollback step and fail the job
+- Step 4 (Summary): Attach results to the workflow summary and artifacts
+
+Rollback condition:
+- Any failed test in the collection triggers the same rollback mechanism used by the health check.
+
+**Key Features:**
+- Both test pipelines must pass before deployment
+- Coverage threshold enforcement (80% minimum)
+- Automatic rollback on deployment failure
+- Parallel execution of test pipelines (optimized)
+- Artifact sharing between workflows
+
+### Manual Deployment
+
+To deploy manually:
+
+1. Go to GitHub Actions → Deploy workflow
+2. Click "Run workflow"
+3. Select branch (usually `master`)
+4. Click "Run workflow"
+5. Monitor progress and wait for completion
 
 ---
 
-## 🔐 Credentials & Access
+## Credentials & Access
 
 ### Where to Find Credentials
 
@@ -550,33 +716,3 @@ The deployment is fully automated using GitHub Actions:
 - **API Gateway URL**: Endpoint URL and stage name
 - **SQS Queue URLs**: Main queue and DLQ URLs
 
----
-
-## Regenerating Diagrams
-
-The diagram sources live in `docs/diagrams/*.puml`. To regenerate the PNGs without any scripts or Docker (zsh on macOS):
-
-```bash
-# From the repository root
-plantuml -tpng docs/diagrams/*.puml
-cp -f docs/diagrams/*.png docs/
-ls -1 docs/*.png
-```
-
-If `plantuml` is not on PATH but you have the PlantUML JAR, use:
-
-```bash
-java -jar /path/to/plantuml.jar -tpng docs/diagrams/*.puml
-cp -f docs/diagrams/*.png docs/
-ls -1 docs/*.png
-```
-
-Updated diagrams:
-
-- `docs/sku-processing-workflow.png`
-- `docs/error-handling-resilience.png`
-- `docs/data-flow-architecture.png`
-
-These reflect the new logic: request source detection, health check short-circuit, observability wrappers, strict item
-validation + mapping, one-item-per-message SQS publishing with partial batch retry, circuit breaker, and MySQL audit
-logging.
