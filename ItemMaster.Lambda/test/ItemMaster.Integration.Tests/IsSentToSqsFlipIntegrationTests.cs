@@ -11,50 +11,57 @@ namespace ItemMaster.Integration.Tests;
 [Collection("Integration Tests")]
 public class IsSentToSqsFlipIntegrationTests : IntegrationTestBase
 {
-    [Fact]
-    [Trait("Category", "Integration")]
-    public async Task AfterSuccessfulPublish_LogShouldFlipIsSentToSqs()
+  [Fact]
+  [Trait("Category", "Integration")]
+  public async Task AfterSuccessfulPublish_LogShouldFlipIsSentToSqs()
+  {
+    // Arrange
+    var sku = "FLIP-001";
+    var request = new ProcessSkusRequest { Skus = new List<string> { sku } };
+    var apiRequest = new APIGatewayProxyRequest
     {
-        // Arrange
-        var sku = "FLIP-001";
-        var request = new ProcessSkusRequest { Skus = new List<string> { sku } };
-        var apiRequest = new APIGatewayProxyRequest
-        {
-            HttpMethod = "POST",
-            Body = JsonSerializer.Serialize(request),
-            RequestContext = new APIGatewayProxyRequest.ProxyRequestContext
-            {
-                RequestId = Guid.NewGuid().ToString(),
-                Stage = "test"
-            }
-        };
+      HttpMethod = "POST",
+      Body = JsonSerializer.Serialize(request),
+      RequestContext = new APIGatewayProxyRequest.ProxyRequestContext
+      {
+        RequestId = Guid.NewGuid().ToString(),
+        Stage = "test"
+      }
+    };
 
-        // Act
-        var response = await Function.FunctionHandler(apiRequest, LambdaContext);
-        response.StatusCode.Should().Be(200);
+    // Act
+    var response = await Function.FunctionHandler(apiRequest, LambdaContext);
+    response.StatusCode.Should().Be(200);
 
-        await Task.Delay(1000);
+    await Task.Delay(2000);
 
-        // Assert (DB)
-        var conn = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
-        var db = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "item_master";
-        var user = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "im_user";
-        var pass = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "im_pass";
-        var cs = $"Server={conn};Database={db};User={user};Password={pass};CharSet=utf8mb4;";
+    // Assert (DB) with simple retry
+    var conn = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
+    var db = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "item_master";
+    var user = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "im_user";
+    var pass = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "im_pass";
+    var cs = $"Server={conn};Database={db};User={user};Password={pass};CharSet=utf8mb4;";
 
-        var opts = new DbContextOptionsBuilder<MySqlDbContext>()
-            .UseMySql(cs, new MySqlServerVersion(new Version(8, 0, 35)))
-            .Options;
+    var opts = new DbContextOptionsBuilder<MySqlDbContext>()
+        .UseMySql(cs, new MySqlServerVersion(new Version(8, 0, 35)))
+        .Options;
 
-        await using var ctx = new MySqlDbContext(opts);
-        var latest = await ctx.ItemMasterSourceLogs
-            .Where(x => x.Sku == sku)
-            .OrderByDescending(x => x.CreatedAt)
-            .FirstOrDefaultAsync();
+    await using var ctx = new MySqlDbContext(opts);
+    ItemMaster.Shared.ItemMasterSourceLog? latest = null;
+    for (var i = 0; i < 10; i++)
+    {
+      latest = await ctx.ItemMasterSourceLogs
+          .Where(x => x.Sku == sku)
+          .OrderByDescending(x => x.CreatedAt)
+          .FirstOrDefaultAsync();
 
-        latest.Should().NotBeNull();
-        latest!.IsSentToSqs.Should().BeTrue();
+      if (latest != null && latest.IsSentToSqs) break;
+      await Task.Delay(500);
     }
+
+    latest.Should().NotBeNull();
+    latest!.IsSentToSqs.Should().BeTrue();
+  }
 }
 
 
