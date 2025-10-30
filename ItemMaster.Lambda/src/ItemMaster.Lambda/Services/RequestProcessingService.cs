@@ -40,7 +40,6 @@ public class RequestProcessingService : IRequestProcessingService
         }
         catch (JsonException)
         {
-            // Re-throw JSON exceptions so they can be handled as 400 errors
             throw;
         }
         catch (Exception ex)
@@ -91,7 +90,6 @@ public class RequestProcessingService : IRequestProcessingService
     {
         try
         {
-            // Validate JSON format first
             try
             {
                 JsonDocument.Parse(inputJson);
@@ -100,7 +98,7 @@ public class RequestProcessingService : IRequestProcessingService
             {
                 _logger.LogWarning("Invalid JSON format in ApiGateway request | TraceId: {TraceId} | Error: {Error}",
                     traceId, jsonEx.Message);
-                throw; // Re-throw to be caught by outer handler
+                throw;
             }
 
             var apiGwRequest = JsonSerializer.Deserialize<APIGatewayProxyRequest>(inputJson, _jsonOptions);
@@ -110,16 +108,15 @@ public class RequestProcessingService : IRequestProcessingService
             {
                 if (apiGwRequest?.IsBase64Encoded == true) bodyRaw = DecodeBase64Body(bodyRaw, traceId);
 
-                // Validate body JSON format
                 try
                 {
                     JsonDocument.Parse(bodyRaw);
                 }
                 catch (JsonException jsonEx)
                 {
-                    _logger.LogWarning("Invalid JSON format in request body | TraceId: {TraceId} | Error: {Error}",
-                        traceId, jsonEx.Message);
-                    throw; // Re-throw to be caught by outer handler
+                _logger.LogWarning("Invalid JSON format in request body | TraceId: {TraceId} | Error: {Error}",
+                    traceId, jsonEx.Message);
+                throw;
                 }
 
                 return JsonSerializer.Deserialize<ProcessSkusRequest>(bodyRaw, _jsonOptions)
@@ -141,16 +138,15 @@ public class RequestProcessingService : IRequestProcessingService
 
     private ProcessSkusRequest ParseDirectInvocationRequest(string inputJson, string traceId)
     {
-        // Validate JSON format first - this will throw JsonException if invalid
         try
         {
             JsonDocument.Parse(inputJson);
         }
         catch (JsonException jsonEx)
         {
-            _logger.LogWarning("Invalid JSON format in direct invocation request | TraceId: {TraceId} | Error: {Error}",
-                traceId, jsonEx.Message);
-            throw; // Re-throw to be caught by outer handler
+                _logger.LogWarning("Invalid JSON format in direct invocation request | TraceId: {TraceId} | Error: {Error}",
+                    traceId, jsonEx.Message);
+                throw;
         }
 
         try

@@ -14,11 +14,9 @@ public class ConfigurationValidationService : IConfigurationValidationService
     {
         var errors = new List<string>();
 
-        // Validate SQS configuration
         var sqsUrl = configuration[ConfigurationConstants.SQS_URL];
         if (string.IsNullOrWhiteSpace(sqsUrl)) errors.Add("Missing SQS URL configuration");
 
-        // Validate Snowflake configuration
         var sfDb = configuration[ConfigurationConstants.SNOWFLAKE_DATABASE];
         var sfSchema = configuration[ConfigurationConstants.SNOWFLAKE_SCHEMA];
         var sfTable = configuration[ConfigurationConstants.SNOWFLAKE_TABLE];

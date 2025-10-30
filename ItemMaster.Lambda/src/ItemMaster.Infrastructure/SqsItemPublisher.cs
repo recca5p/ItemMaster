@@ -53,7 +53,6 @@ public class SqsItemPublisher : IItemPublisher
             var batches = CreateBatchesFromUnifiedItems(itemList);
             var publishResults = new List<BatchPublishResult>();
 
-            // Log that we're publishing one message per item
             _logger.LogInformation(
                 "Publishing {TotalItems} items as individual messages in {BatchCount} batches (max 10 messages per batch) | TraceId: {TraceId}",
                 itemList.Count, batches.Count, traceId);

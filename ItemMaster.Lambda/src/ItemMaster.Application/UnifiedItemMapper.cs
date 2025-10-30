@@ -34,30 +34,23 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         var validationErrors = new List<string>();
         var skippedProperties = new List<string>();
 
-        // Core validation: SKU, Name/Title, Barcode must be present
         if (string.IsNullOrWhiteSpace(item.Sku)) validationErrors.Add("Missing SKU");
 
         if (string.IsNullOrWhiteSpace(item.ProductTitle)) validationErrors.Add("Missing ProductTitle (Name)");
 
-        // Either Barcode or SecondaryBarcode must have value
         if (string.IsNullOrWhiteSpace(item.Barcode) && string.IsNullOrWhiteSpace(item.SecondaryBarcode))
             validationErrors.Add("Missing both Barcode and SecondaryBarcode");
 
-        // HTS code validation - must be 10 characters
         if (string.IsNullOrWhiteSpace(item.Hts) || item.Hts.Length != RequiredHtsCodeLength)
             validationErrors.Add($"Invalid HTS code (must be {RequiredHtsCodeLength} digits, got: '{item.Hts}')");
 
-        // Country of Origin validation - must be 2 characters
         if (string.IsNullOrWhiteSpace(item.CountryOfOrigin) || item.CountryOfOrigin.Length != RequiredCountryCodeLength)
             validationErrors.Add(
                 $"Invalid CountryOfOrigin (must be {RequiredCountryCodeLength} chars, got: '{item.CountryOfOrigin}')");
 
-        // Color and Size validation
         if (string.IsNullOrWhiteSpace(item.Color)) validationErrors.Add("Missing Color");
 
         if (string.IsNullOrWhiteSpace(item.Size)) validationErrors.Add("Missing Size");
-
-        // Initial validation - check core fields first
         if (validationErrors.Any())
         {
             var sku = string.IsNullOrWhiteSpace(item.Sku) ? "UNKNOWN" : item.Sku;
@@ -77,18 +70,14 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             CountryOfOriginCode = item.CountryOfOrigin
         };
 
-        // Track optional properties that are missing
         if (string.IsNullOrWhiteSpace(item.Description))
             skippedProperties.Add("Description");
 
         if (string.IsNullOrWhiteSpace(item.ChinaHts))
             skippedProperties.Add("ChinaHtsCode");
 
-        // Determine which barcode to use based on CreatedAt date
-        // For items created >= 2024-01-01, use Barcode as Gs1Barcode
-        // For items created < 2024-01-01, use SecondaryBarcode as AlternateBarcodes
         if (item.CreatedAtSnowflake.HasValue &&
-            item.CreatedAtSnowflake.Value >= new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero))
+            item.CreatedAtSnowflake.Value >= BarcodeLogicCutoffDate)
         {
             unifiedItem.Gs1Barcode = item.Barcode;
             unifiedItem.AlternateBarcodes = new List<string>();
@@ -98,7 +87,6 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         }
         else
         {
-            // For older items, use SecondaryBarcode as primary
             unifiedItem.Gs1Barcode =
                 !string.IsNullOrWhiteSpace(item.SecondaryBarcode) ? item.SecondaryBarcode : item.Barcode;
             unifiedItem.AlternateBarcodes = new List<string>();
@@ -107,7 +95,6 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             if (!string.IsNullOrWhiteSpace(item.ThirdBarcode)) unifiedItem.AlternateBarcodes.Add(item.ThirdBarcode);
         }
 
-        // Prices - list price is required
         unifiedItem.Prices = new List<PriceInfo>
         {
             new()
@@ -118,10 +105,8 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             }
         };
 
-        // Costs - unit and landed costs
         unifiedItem.Costs = new List<CostInfo>();
 
-        // Unit cost is optional
         if (item.Cost > 0)
         {
             unifiedItem.Costs.Add(new CostInfo
@@ -132,7 +117,6 @@ public class UnifiedItemMapper : IUnifiedItemMapper
             });
         }
 
-        // Landed cost is REQUIRED per mapping rules
         if (item.LandedCost > 0)
         {
             unifiedItem.Costs.Add(new CostInfo
@@ -144,11 +128,9 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         }
         else
         {
-            // Landed cost is required but missing
             validationErrors.Add("Missing required LandedCost");
         }
 
-        // Categories
         unifiedItem.Categories = new List<CategoryInfo>();
         if (!string.IsNullOrWhiteSpace(item.Category))
             unifiedItem.Categories.Add(new CategoryInfo
@@ -168,7 +150,6 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         else
             skippedProperties.Add("Category.brand");
 
-        // Attributes
         unifiedItem.Attributes = new List<AttributeInfo>
         {
             new() { Id = "size", Value = item.Size },
@@ -180,13 +161,11 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         else
             skippedProperties.Add("Attribute.brand_name");
 
-        // Fabric content is REQUIRED per mapping rules
         if (!string.IsNullOrWhiteSpace(item.FabricContent))
             unifiedItem.Attributes.Add(new AttributeInfo { Id = "fabric_content", Value = item.FabricContent });
         else
             validationErrors.Add("Missing required FabricContent");
 
-        // Fabric composition is REQUIRED per mapping rules
         if (!string.IsNullOrWhiteSpace(item.FabricComposition))
             unifiedItem.Attributes.Add(new AttributeInfo { Id = "fabric_composition", Value = item.FabricComposition });
         else
@@ -207,15 +186,12 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         else
             skippedProperties.Add("Attribute.fast_mover");
 
-        // Brand entity attribute
         if (!string.IsNullOrWhiteSpace(item.Brand))
             unifiedItem.Attributes.Add(new AttributeInfo { Id = "brand_entity", Value = item.Brand });
 
-        // Inventory sync flag - default to "ON" if missing or invalid
-        var inventorySyncValue = string.IsNullOrWhiteSpace(item.InventorySyncFlag) ? "ON" : item.InventorySyncFlag;
+        var inventorySyncValue = string.IsNullOrWhiteSpace(item.InventorySyncFlag) ? InventorySyncDefault : item.InventorySyncFlag;
         unifiedItem.Attributes.Add(new AttributeInfo { Id = "inventory_sync_enabled", Value = inventorySyncValue });
 
-        // Links
         unifiedItem.Links = new List<LinkInfo>();
         if (!string.IsNullOrWhiteSpace(item.ProductImageUrl))
             unifiedItem.Links.Add(new LinkInfo
@@ -226,7 +202,6 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         else
             skippedProperties.Add("Link.ProductImageUrl");
 
-        // Images
         unifiedItem.Images = new List<ImageInfo>();
         if (!string.IsNullOrWhiteSpace(item.ProductImageUrlPos1))
             unifiedItem.Images.Add(new ImageInfo
@@ -255,7 +230,6 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         else
             skippedProperties.Add("Image.Pos3");
 
-        // Dates
         unifiedItem.Dates = new List<DateInfo>();
         if (item.CreatedAtShopify.HasValue)
             unifiedItem.Dates.Add(new DateInfo
@@ -277,7 +251,6 @@ public class UnifiedItemMapper : IUnifiedItemMapper
         else
             skippedProperties.Add("Date.Snowflake");
 
-        // Final validation - check if any new errors were added during mapping
         if (validationErrors.Any())
         {
             var sku = string.IsNullOrWhiteSpace(item.Sku) ? "UNKNOWN" : item.Sku;

@@ -52,7 +52,6 @@ public class LambdaRequestHandler : ILambdaRequestHandler
         }
         catch (Exception ex)
         {
-            // Fallback error handling if service resolution or other critical errors occur
             try
             {
                 using var scope = _serviceProvider.CreateScope();
@@ -63,7 +62,6 @@ public class LambdaRequestHandler : ILambdaRequestHandler
                     "[ERROR] Unhandled exception in Lambda request handler. Error: {Error} | Type: {ExceptionType} | StackTrace: {StackTrace} | InnerException: {InnerException}",
                     ex.Message, ex.GetType().FullName, ex.StackTrace, ex.InnerException?.Message ?? "none");
 
-                // Log full exception details including inner exceptions
                 var fullException = ex.ToString();
                 logger.LogError("[ERROR] Full exception details: {FullException}", fullException);
 
@@ -73,7 +71,6 @@ public class LambdaRequestHandler : ILambdaRequestHandler
             }
             catch
             {
-                // If even error handling fails, return a basic error response
                 var basicResponseService = new ResponseService();
                 return basicResponseService.CreateErrorResponse(
                     $"Critical error: {ex.Message}",
@@ -176,7 +173,7 @@ public class LambdaRequestHandler : ILambdaRequestHandler
                 "[EXECUTE] Exception in ExecuteBusinessLogic. Error: {Error} | Type: {ExceptionType} | StackTrace: {StackTrace} | InnerException: {InnerException}",
                 ex.Message, ex.GetType().FullName, ex.StackTrace, ex.InnerException?.Message ?? "none");
             logger.LogError("[EXECUTE] Full exception: {FullException}", ex.ToString());
-            throw; // Re-throw to be caught by outer handler
+            throw;
         }
     }
 

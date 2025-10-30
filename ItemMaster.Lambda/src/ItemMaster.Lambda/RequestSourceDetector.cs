@@ -27,7 +27,6 @@ public class RequestSourceDetector : IRequestSourceDetector
                 inputJson = "{}";
             }
 
-            // Check for empty/null (Health Check)
             if (string.IsNullOrWhiteSpace(inputJson)) return RequestSource.CicdHealthCheck;
 
             var trimmed = inputJson.Trim();
@@ -36,7 +35,6 @@ public class RequestSourceDetector : IRequestSourceDetector
             var doc = JsonDocument.Parse(inputJson);
             var root = doc.RootElement;
 
-            // Check for EventBridge
             if (root.TryGetProperty("source", out var source))
             {
                 var sourceStr = source.GetString()?.ToLowerInvariant() ?? "";
@@ -45,7 +43,6 @@ public class RequestSourceDetector : IRequestSourceDetector
                 if (root.TryGetProperty("detail-type", out _)) return RequestSource.EventBridge;
             }
 
-            // Check for API Gateway
             if (root.TryGetProperty("requestContext", out var requestContext))
             {
                 var hasRequestId = requestContext.TryGetProperty("requestId", out _);

@@ -45,10 +45,8 @@ public class DependencyInjectionService : IDependencyInjectionService
     {
         var services = new ServiceCollection();
 
-        // Register core services first
         RegisterCoreServices(services, configuration);
 
-        // Register Lambda-specific services
         RegisterLambdaServices(services);
 
         if (isTestMode)
@@ -71,7 +69,6 @@ public class DependencyInjectionService : IDependencyInjectionService
             b.AddSerilog();
         });
 
-        // Configure IOptions pattern for all configuration sections
         RegisterConfigurationOptions(services, configuration);
     }
 
@@ -96,16 +93,13 @@ public class DependencyInjectionService : IDependencyInjectionService
 
     private void RegisterTestModeServices(IServiceCollection services, IConfiguration configuration)
     {
-        // Check if we're in integration test mode (has MYSQL_HOST)
         var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
         var isIntegrationTestMode = !string.IsNullOrEmpty(mysqlHost);
 
-        // Log DI setup information (before logger is available from DI)
         Console.WriteLine($"[DI] Registering test mode services. Integration test mode: {isIntegrationTestMode}, MYSQL_HOST: {mysqlHost ?? "not set"}, AWS_ENDPOINT_URL: {Environment.GetEnvironmentVariable("AWS_ENDPOINT_URL") ?? "not set"}, SQS_URL: {configuration[ConfigurationConstants.SQS_URL] ?? "not set"}");
 
         if (isIntegrationTestMode)
         {
-            // Integration test mode - use real MySQL
             var mysqlDb = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "item_master";
             var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "im_user";
             var mysqlPass = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "im_pass";
@@ -156,22 +150,17 @@ public class DependencyInjectionService : IDependencyInjectionService
             }
             else
             {
-                // Add a mock secrets manager if no endpoint
                 services.AddSingleton<IAmazonSecretsManager, AmazonSecretsManagerClient>();
             }
         }
         else
         {
-            // Unit test mode - In-memory database
             services.AddDbContext<MySqlDbContext>(o => o.UseInMemoryDatabase(ConfigurationConstants.IN_MEMORY_DB_NAME));
-            // Mock services for unit tests
             services.AddSingleton<IAmazonSecretsManager, AmazonSecretsManagerClient>();
         }
 
-        // Register connection providers and repositories
         if (isIntegrationTestMode)
         {
-            // Integration test: Use mock Snowflake connection provider
             services.AddScoped<SnowflakeConnectionProvider, MockSnowflakeConnectionProvider>(sp =>
             {
                 var secretsManager = sp.GetRequiredService<IAmazonSecretsManager>();
@@ -199,51 +188,38 @@ public class DependencyInjectionService : IDependencyInjectionService
             services.AddScoped<ISnowflakeRepository, SnowflakeRepository>();
         }
 
-        // Configure SQS options - REQUIRED for SqsItemPublisher to work
         ConfigureSqsOptions(services, configuration);
         var sqsUrl = configuration[ConfigurationConstants.SQS_URL];
         Console.WriteLine($"[DI] SQS options configured. QueueUrl: {sqsUrl ?? "MISSING"}");
 
-        // Use production implementations
         services.AddScoped<IItemMasterLogRepository, EfItemMasterLogRepository>();
         services.AddScoped<IItemPublisher, SqsItemPublisher>();
         services.AddScoped<IMetricsService, CloudWatchMetricsService>();
         services.AddScoped<ITracingService, XRayTracingService>();
         services.AddScoped<IObservabilityService, ObservabilityService>();
 
-        // Application services
         RegisterApplicationServices(services);
     }
 
     private void RegisterProductionServices(IServiceCollection services, IConfiguration configuration)
     {
-        // AWS services
         services.AddSingleton<IAmazonSecretsManager, AmazonSecretsManagerClient>();
         services.AddSingleton<IConnectionStringProvider, SecretsAwareMySqlConnectionStringProvider>();
         services.AddSingleton<IAmazonSQS, AmazonSQSClient>();
         services.AddSingleton<IAmazonCloudWatch, AmazonCloudWatchClient>();
 
-        // Configuration validation
         var validationResult = _configValidationService.ValidateConfiguration(configuration);
         if (!validationResult.IsValid)
             throw new InvalidOperationException(
                 $"Configuration validation failed: {string.Join("; ", validationResult.Errors)}");
 
-        // Configure SQS options
         ConfigureSqsOptions(services, configuration);
-
-        // Database configuration
         ConfigureDatabase(services, configuration);
-
-        // Snowflake configuration
         ConfigureSnowflake(services, configuration);
-
-        // Observability services
         services.AddScoped<IMetricsService, CloudWatchMetricsService>();
         services.AddScoped<ITracingService, XRayTracingService>();
         services.AddScoped<IObservabilityService, ObservabilityService>();
 
-        // Application services
         RegisterApplicationServices(services);
     }
 
@@ -255,12 +231,9 @@ public class DependencyInjectionService : IDependencyInjectionService
         services.AddScoped<IItemMappingService, ItemMappingService>();
         services.AddScoped<IItemPublishingService, ItemPublishingService>();
 
-        // New split services following clean architecture
         services.AddScoped<ISkuAnalysisService, SkuAnalysisService>();
         services.AddScoped<IProcessingResponseBuilder, ProcessingResponseBuilder>();
         services.AddScoped<ISkuProcessingOrchestrator, SkuProcessingOrchestrator>();
-
-        // Main use case - now much simpler
         services.AddScoped<IProcessSkusUseCase, ProcessSkusUseCase>();
     }
 

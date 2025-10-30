@@ -8,7 +8,6 @@ public class ProcessSkusRequest
 {
     public List<string> Skus { get; set; } = new();
 
-    // Optional: Accept SKUs as comma-separated string
     public string? SkusString { get; set; }
 
     /// <summary>

@@ -98,23 +98,12 @@ public class SkuProcessingOrchestrator : ISkuProcessingOrchestrator
             "Processing SKUs request | Count: {SkuCount} | RequestSource: {RequestSource} | TraceId: {TraceId}",
             requestedSkus.Count, requestSource, traceId);
 
-        // Step 1: Fetch items
         var itemsList = await FetchItemsAsync(requestedSkus, requestSource, traceId, cancellationToken);
-
-        // Step 2: Analyze not found SKUs
         var notFoundSkus = _skuAnalysisService.AnalyzeNotFoundSkus(requestedSkus, itemsList);
-
-        // Step 3: Map items to unified format
         var mappingResult = await _itemMappingService.MapItemsAsync(itemsList, requestSource, traceId);
-
-        // Step 4: Log processing summary
         LogProcessingSummary(itemsList, notFoundSkus, mappingResult, traceId);
-
-        // Step 5: Publish items
         await _itemPublishingService.PublishItemsAsync(mappingResult.UnifiedItems, requestSource, traceId,
             cancellationToken);
-
-        // Step 6: Create response
         var response = _responseBuilder.CreateSuccessResponse(itemsList, notFoundSkus, mappingResult);
 
         _logger.LogInformation(

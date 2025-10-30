@@ -23,9 +23,6 @@ public class MockSnowflakeConnectionProvider : SnowflakeConnectionProvider
 
   public override Task<string> GetConnectionStringAsync()
   {
-    // Return a mock Snowflake connection string for integration tests
-    // This won't actually connect, but it satisfies the dependency
-
     var account = _mockConfiguration["snowflake:account"] ?? "TEST_ACCOUNT";
     var user = _mockConfiguration["snowflake:user"] ?? "TEST_USER";
     var role = _mockConfiguration["snowflake:role"] ?? "TEST_ROLE";
