@@ -177,19 +177,29 @@ jobs:
             --name LIVE \
             --region $AWS_REGION \
             --query 'FunctionVersion' \
-            --output text 2>/dev/null || echo "")
+            --output text 2>/dev/null | tr -d '\n\r' || echo "")
 
-          if [ -z "$PREVIOUS_ALIAS" ]; then
+          if [ -z "$PREVIOUS_ALIAS" ] || [ "$PREVIOUS_ALIAS" = "None" ]; then
             PREVIOUS_VERSION=$(aws lambda list-versions-by-function \
               --function-name $LAMBDA_FUNCTION_NAME \
               --query 'Versions[-2].Version' \
               --output text \
-              --region $AWS_REGION 2>/dev/null || echo "")
+              --region $AWS_REGION 2>/dev/null | tr -d '\n\r' || echo "")
           else
-            PREVIOUS_VERSION="$PREVIOUS_ALIAS"
+            PREVIOUS_VERSION=$(echo "$PREVIOUS_ALIAS" | tr -d '\n\r')
           fi
 
-          echo "previous=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          if [ -z "$PREVIOUS_VERSION" ] || [ "$PREVIOUS_VERSION" = "None" ] || [ "$PREVIOUS_VERSION" = "null" ]; then
+            PREVIOUS_VERSION=""
+          fi
+
+          PREVIOUS_VERSION=$(echo "$PREVIOUS_VERSION" | tr -d '\n\r\t' | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')
+
+          {
+            echo "previous<<EOF"
+            echo "$PREVIOUS_VERSION"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
           echo "Previous Lambda version: $PREVIOUS_VERSION"
 
       - name: Deploy Lambda function
