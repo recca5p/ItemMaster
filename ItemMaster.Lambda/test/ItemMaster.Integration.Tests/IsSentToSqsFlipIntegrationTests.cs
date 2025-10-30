@@ -16,7 +16,7 @@ public class IsSentToSqsFlipIntegrationTests : IntegrationTestBase
   public async Task AfterSuccessfulPublish_LogShouldFlipIsSentToSqs()
   {
     // Arrange
-    var sku = "FLIP-001";
+    var sku = "SQS-TEST-001";
     var request = new ProcessSkusRequest { Skus = new List<string> { sku } };
     var apiRequest = new APIGatewayProxyRequest
     {

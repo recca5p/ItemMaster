@@ -520,7 +520,7 @@ Integration tests verify end-to-end functionality with real services running in 
 
 ```bash
 # Start services (MySQL and LocalStack)
-docker-compose up -d
+docker compose up -d
 
 # Wait for services to be ready, then run tests
 dotnet test --filter "Category=Integration"
