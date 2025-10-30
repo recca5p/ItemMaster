@@ -659,7 +659,7 @@ The deployment pipeline consists of three coordinated workflows:
 
 ### Automation Tests (Postman/Newman)
 
-Status: In development; this section will be available soon.
+**TODO:** This section is under development and will be available soon.
 
 Automation tests validate the end-to-end API behavior immediately after each deployment to the Development environment. The flow is:
 
