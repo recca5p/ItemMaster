@@ -419,6 +419,10 @@ The `item_master_source_log` table tracks every item processed:
 - **IsSentToSqs**: Boolean flag indicating successful SQS delivery
 - **CreatedAt**: Timestamp of processing
 
+Update behavior:
+- A row is created during mapping with `IsSentToSqs = false`.
+- After a successful SQS publish, the latest row for each SKU is updated to `IsSentToSqs = true`.
+
 ---
 
 ## Getting Started
@@ -579,6 +583,22 @@ dotnet lambda invoke-function FunctionHandler --payload '{"source":"aws.events",
 ```
 
 ---
+
+### Testing API Gateway on AWS (Postman)
+
+Follow these steps to execute the live API Gateway endpoint using the attached Postman collection:
+
+1. Import the attached Postman collection into Postman
+2. Open the "Process Item" request in the collection
+3. Select the Authorization tab for that request
+4. Scroll to the bottom and click "Get New Access Token"
+5. In the login popup, enter the credentials provided to you
+6. After authentication, click "Use Token" (and "Refresh Token" when it expires)
+7. Postman will automatically attach the token to the request; click Send
+
+Notes:
+- The request uses the environment base URL for the AWS API Gateway stage
+- If the token expires, click "Get New Access Token" again to renew
 
 ## Deployment
 

@@ -3,6 +3,7 @@ using ItemMaster.Contracts;
 using ItemMaster.Infrastructure.Observability;
 using ItemMaster.Shared;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace ItemMaster.Application.Services;
 
@@ -18,15 +19,18 @@ public class ItemPublishingService : IItemPublishingService
     private readonly IItemPublisher _itemPublisher;
     private readonly ILogger<ItemPublishingService> _logger;
     private readonly IObservabilityService _observabilityService;
+    private readonly IItemMasterLogRepository _logRepository;
 
     public ItemPublishingService(
         IItemPublisher itemPublisher,
         IObservabilityService observabilityService,
-        ILogger<ItemPublishingService> logger)
+        ILogger<ItemPublishingService> logger,
+        IItemMasterLogRepository logRepository)
     {
         _itemPublisher = itemPublisher;
         _observabilityService = observabilityService;
         _logger = logger;
+        _logRepository = logRepository;
     }
 
     public async Task PublishItemsAsync(List<UnifiedItemMaster> unifiedItems, RequestSource requestSource,
@@ -52,6 +56,14 @@ public class ItemPublishingService : IItemPublishingService
                     {
                         ["requestSource"] = requestSource.ToString()
                     });
+
+                var publishedSkus = unifiedItems.Select(i => i.Sku).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+                if (publishedSkus.Count > 0)
+                {
+                    var markResult = await _logRepository.MarkSentToSqsAsync(publishedSkus, cancellationToken);
+                    if (!markResult.IsSuccess)
+                        _logger.LogWarning("MarkSentToSqsAsync failed: {Error}", markResult.ErrorMessage);
+                }
 
                 return publishResult;
             },

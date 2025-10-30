@@ -30,6 +30,23 @@ public class InMemoryItemMasterLogRepository : IItemMasterLogRepository
         return Task.FromResult(Result.Success());
     }
 
+    public Task<Result> MarkSentToSqsAsync(IEnumerable<string> skus, CancellationToken cancellationToken = default)
+    {
+        var skuSet = new HashSet<string>(skus.Where(s => !string.IsNullOrWhiteSpace(s)), StringComparer.OrdinalIgnoreCase);
+        if (skuSet.Count == 0) return Task.FromResult(Result.Success());
+
+        foreach (var sku in skuSet)
+        {
+            var latest = _sourceLogs
+                .Where(l => l.Sku.Equals(sku, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(l => l.CreatedAt)
+                .FirstOrDefault();
+            if (latest != null) latest.IsSentToSqs = true;
+        }
+
+        return Task.FromResult(Result.Success());
+    }
+
     public IReadOnlyList<ItemMasterSourceLog> GetSourceLogs()
     {
         return _sourceLogs.AsReadOnly();
