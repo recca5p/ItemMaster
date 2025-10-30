@@ -17,6 +17,7 @@ data through AWS Lambda. The solution integrates with Snowflake for data retriev
 - [Running & Testing](#running--testing)
 - [Deployment](#deployment)
 - [Credentials & Access](#credentials--access)
+- [Regenerating Diagrams](#regenerating-diagrams)
 
 ---
 
@@ -65,7 +66,7 @@ ItemMaster/
 - External service implementations:
     - `SnowflakeRepository` - RSA-authenticated data access
     - `SqsItemPublisher` - Message publishing with circuit breaker
-    - `MySqlItemMasterLogRepository` - Audit logging
+    - `MySqlItemMasterLogRepository` - Source data audit logging to `item_master_source_log` table
 - Resilience patterns (Polly)
 - EF Core configurations
 
@@ -116,8 +117,8 @@ The complete AWS infrastructure includes:
 - **SQS Queue**: Main queue with 4-day retention, 60s visibility timeout, 10 max receive count
 - **Dead Letter Queue (DLQ)**: Captures failed messages after 10 attempts
 - **Snowflake Integration**: RSA key-pair authentication (no password required)
-- **Parameter Store**: Encrypted configuration (RSA keys, connection strings)
-- **Secrets Manager**: Database credentials with automatic rotation
+- **Parameter Store**: Encrypted application configuration
+- **Secrets Manager**: Secrets (RSA private key for Snowflake, DB credentials) with automatic rotation where applicable
 - **CloudWatch**: Logs (7-day retention) and custom metrics
 - **X-Ray**: Distributed tracing (PassThrough mode)
 - **RDS MySQL**: Audit trail database (db.t4g.micro ARM-based)
@@ -166,22 +167,21 @@ The data flow demonstrates three request sources:
 **Complete processing flow:**
 
 1. **Request Source Detection**: `RequestSourceDetector` identifies trigger source
-2. **Authentication Validation**: JWT token verification (API Gateway only)
-3. **Snowflake Query**: RSA-authenticated data retrieval
-4. **Batch Processing**: Split items into batches of 10
-5. **Circuit Breaker Check**: Protect against cascading failures
-6. **SQS Publishing**: Send messages with retry logic
-7. **Partial Batch Retry**: Only retry failed messages (not entire batch)
-8. **Dead Letter Queue**: Capture permanently failed messages after 10 attempts
+2. **Health Check Short-Circuit**: Empty/`{}` payload from CI/CD path returns 200 without processing
+3. **Observability Wrappers**: All major operations run under `ObservabilityService` for metrics + tracing
+4. **Snowflake Query**: RSA-authenticated data retrieval
+5. **Validation & Mapping**: Domain `Item` → `UnifiedItemMaster`, skipping invalid items with detailed reasons
+6. **SQS Publishing**: One message per unified item; batches of 10; partial batch retry
+7. **Circuit Breaker**: Protect against cascading failures (open ~30s) on repeated errors
+8. **DLQ Redrive**: SQS DLQ after 10 receives
 9. **Audit Logging**: MySQL database logs all operations
-10. **Observability**: CloudWatch metrics and X-Ray traces
 
 **Key Feature - Partial Batch Retry:**
 
 - If 7 out of 10 messages succeed, only 3 failed messages are retried
 - Successful messages logged immediately and never retried
 - Exponential backoff: 1s → 2s → 4s
-- After 3 retries, failed messages move to DLQ
+- After retries are exhausted, remaining failures are logged and surfaced
 
 ---
 
@@ -193,17 +193,17 @@ The data flow demonstrates three request sources:
 
 #### 1. Circuit Breaker (Polly)
 
-- **Failure Threshold**: 5 failures (50%)
-- **Break Duration**: 30 seconds
-- **Sampling Duration**: 60 seconds
-- **Minimum Throughput**: 3 requests
+- **Failure Threshold**: 50% failure ratio, min throughput configurable
+- **Break Duration**: 30 seconds (configurable)
+- **Sampling Duration**: 60 seconds (configurable)
+- **Minimum Throughput**: 3 (configurable)
 - **Behavior**: Fast-fail when circuit opens, prevents cascading failures
 
 #### 2. Retry Policy
 
-- **Max Retries**: 3 attempts
-- **Base Delay**: 1000ms (1 second)
-- **Backoff Multiplier**: 2.0x
+- **Max Retries**: Default 2 (configurable)
+- **Base Delay**: Default 1000ms (configurable)
+- **Backoff Multiplier**: 2.0x (configurable)
 - **Pattern**: Exponential backoff (1s → 2s → 4s)
 - **Scope**: Per-message retry, not per-batch
 
@@ -214,17 +214,10 @@ The data flow demonstrates three request sources:
 - **Purpose**: Capture permanently failed messages
 - **Monitoring**: CloudWatch alarms on DLQ message count
 
-#### 4. Partial Batch Retry Logic
+#### 4. Validation Failures
 
-```csharp
-// Example: 10 messages sent, 7 succeed, 3 fail
-Batch: [M1, M2, M3, M4, M5, M6, M7, M8, M9, M10]
-Result: [✓, ✓, ✓, ✓, ✓, ✓, ✓, ✗, ✗, ✗]
-
-// Only retry failed messages
-Retry: [M8, M9, M10] with exponential backoff
-// Successful messages already logged, never retried
-```
+- Invalid items (missing SKU, invalid HTS, missing color/size, etc.) are skipped with a reason
+- Skipped counts emitted via metric `ItemsSkippedValidation`
 
 ---
 
@@ -240,9 +233,9 @@ The Lambda cold start initialization includes:
 2. **Test Mode Check**: Environment variable `ITEMMASTER_TEST_MODE` for local testing
 3. **Configuration Loading**:
     - appsettings.json (base configuration)
-    - Environment variables (DOTNET_ENVIRONMENT, CONFIG_BASE, REGION, SSM_RSA_PATH)
-    - Parameter Store (`/im/development/*`)
-4. **RSA Key Loading**: Snowflake private key from Parameter Store (SecureString with KMS)
+    - Environment variables (DOTNET_ENVIRONMENT, CONFIG_BASE, REGION)
+    - Parameter Store (`{base}/{env}/`) for app configuration
+4. **RSA Key Loading**: Snowflake private key from **Secrets Manager** secret referenced by `SSM_RSA_PATH`
 5. **Service Container Setup**: Dependency injection with all services registered
 6. **AWS Services Registration**: SQS, CloudWatch, Secrets Manager, X-Ray
 7. **Database Configuration**: Entity Framework Core with MySQL
@@ -297,20 +290,21 @@ When `ITEMMASTER_TEST_MODE=true`:
 | **Visibility Timeout** | **30 seconds**        | Lower for inspection     |
 | **Encryption**         | SQS-Managed SSE       | Server-side encryption   |
 
-### CloudWatch Logs Configuration
+### CloudWatch Logs & Metrics
 
 | Log Group                                      | Retention  | Description               |
 |------------------------------------------------|------------|---------------------------|
 | `/aws/lambda/im-dev-lambda-item-master`        | **7 days** | Main Lambda function logs |
 | `/aws/lambda/im-dev-lambda-item-master-api-gw` | **3 days** | API Gateway Lambda logs   |
 
-**Custom Metrics:**
+**Custom Metrics Emitted (actual):**
 
-- `ItemsProcessed` - Number of items processed per invocation
-- `ItemsPublished` - Number of items successfully published to SQS
-- `ProcessingDuration` - Total processing time
-- `SnowflakeQueryDuration` - Snowflake query execution time
-- `SqsPublishDuration` - SQS publishing time
+- `ProcessingSuccess` / `ProcessingFailure` (dimensions: Operation, RequestSource)
+- `ProcessingDuration` (ms) (dimensions: Operation, RequestSource)
+- `SnowflakeItemsFetched` (count)
+- `LatestItemsFetched` (count)
+- `ItemsPublishedToSqs` (count)
+- `ItemsSkippedValidation` (count)
 
 ### AWS Cognito Configuration
 
@@ -363,10 +357,10 @@ When `ITEMMASTER_TEST_MODE=true`:
 #### SQS Configuration
 
 - `sqs/url` (String) - SQS queue URL
-- `sqs/max_retries` (String) - Maximum retry attempts (default: 3)
+- `sqs/max_retries` (String) - Maximum retry attempts (default: 2)
 - `sqs/base_delay_ms` (String) - Base delay in milliseconds (default: 1000)
 - `sqs/backoff_multiplier` (String) - Exponential backoff multiplier (default: 2.0)
-- `sqs/batch_size` (String) - Batch size for message publishing (default: 10)
+- `sqs/batch_size` (String) - (present for compatibility; current publisher uses 10 per batch)
 
 #### Circuit Breaker Configuration
 
@@ -375,7 +369,8 @@ When `ITEMMASTER_TEST_MODE=true`:
 - `sqs/circuit_breaker_sampling_duration_seconds` (String) - Sampling window duration in seconds (default: 60)
 - `sqs/circuit_breaker_minimum_throughput` (String) - Minimum throughput before circuit breaker activates (default: 3)
 
-**Note:** All parameters are stored as Standard String type.
+**Note:** Parameters above are application config; the RSA private key itself is stored in **Secrets Manager** and
+referenced via `SSM_RSA_PATH` (secret name/ARN).
 
 ### Snowflake RSA Authentication
 
@@ -384,7 +379,8 @@ When `ITEMMASTER_TEST_MODE=true`:
 - **Method**: RSA Key-Pair (no password required)
 - **Algorithm**: RSA 2048-bit
 - **Format**: PEM (PKCS#8)
-- **Private Key Storage**: AWS Parameter Store (SecureString with KMS encryption)
+- **Private Key Storage**: **AWS Secrets Manager** (secret field `private_key` or full PEM string)
+- **Secret Reference**: Environment variable `SSM_RSA_PATH` points to the secret name/ARN
 - **Public Key**: Registered in Snowflake service account
 - **Connection**: HTTPS/TLS for all communications
 - **Benefits**: More secure than password, no credential rotation needed
@@ -406,6 +402,18 @@ When `ITEMMASTER_TEST_MODE=true`:
 | **Instance Class** | db.t4g.micro (ARM) | Cost-effective ARM-based |
 | **Storage**        | 20 GB SSD          | General Purpose storage  |
 | **Port**           | 3306               | MySQL default port       |
+
+**Database Schema:**
+
+The `item_master_source_log` table tracks every item processed:
+
+- **Sku**: Item identifier
+- **SourceModel**: Original data from Snowflake (JSON)
+- **ValidationStatus**: "valid" or "invalid"
+- **CommonModel**: Mapped unified item model (JSON, null if validation failed)
+- **Errors**: Validation error messages or warnings about skipped properties
+- **IsSentToSqs**: Boolean flag indicating successful SQS delivery
+- **CreatedAt**: Timestamp of processing
 
 ---
 
@@ -537,9 +545,38 @@ The deployment is fully automated using GitHub Actions:
 - **JWT Token Details**: How to obtain access tokens and refresh tokens (configured in Postman collection)
 - **Token Expiration Times**: Access token (1 hour), Refresh token (1 day)
 - **Snowflake Connection**: Account URL, username, database details
-- **Snowflake RSA Keys**: Location of private key in Parameter Store
+- **Snowflake RSA Keys**: Stored in AWS Secrets Manager (secret name/ARN in `SSM_RSA_PATH`)
 - **MySQL Credentials**: Secret ARN in Secrets Manager
 - **API Gateway URL**: Endpoint URL and stage name
 - **SQS Queue URLs**: Main queue and DLQ URLs
 
 ---
+
+## Regenerating Diagrams
+
+The diagram sources live in `docs/diagrams/*.puml`. To regenerate the PNGs without any scripts or Docker (zsh on macOS):
+
+```bash
+# From the repository root
+plantuml -tpng docs/diagrams/*.puml
+cp -f docs/diagrams/*.png docs/
+ls -1 docs/*.png
+```
+
+If `plantuml` is not on PATH but you have the PlantUML JAR, use:
+
+```bash
+java -jar /path/to/plantuml.jar -tpng docs/diagrams/*.puml
+cp -f docs/diagrams/*.png docs/
+ls -1 docs/*.png
+```
+
+Updated diagrams:
+
+- `docs/sku-processing-workflow.png`
+- `docs/error-handling-resilience.png`
+- `docs/data-flow-architecture.png`
+
+These reflect the new logic: request source detection, health check short-circuit, observability wrappers, strict item
+validation + mapping, one-item-per-message SQS publishing with partial batch retry, circuit breaker, and MySQL audit
+logging.

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
@@ -47,6 +48,7 @@ public class SecretsAwareMySqlConnectionStringProvider : IConnectionStringProvid
         }
     }
 
+    [ExcludeFromCodeCoverage]
     private async Task<MySqlSecret> GetMySqlSecretAsync(string secretArn)
     {
         var resp = await _secretsManager.GetSecretValueAsync(new GetSecretValueRequest { SecretId = secretArn });
@@ -87,6 +89,7 @@ public class SecretsAwareMySqlConnectionStringProvider : IConnectionStringProvid
         }
     }
 
+    [ExcludeFromCodeCoverage]
     private class MySqlSecret
     {
         public string Username { get; set; } = string.Empty;

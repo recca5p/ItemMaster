@@ -1,12 +1,13 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 namespace ItemMaster.Contracts;
 
+[ExcludeFromCodeCoverage]
 public class ProcessSkusRequest
 {
     public List<string> Skus { get; set; } = new();
 
-    // Optional: Accept SKUs as comma-separated string
     public string? SkusString { get; set; }
 
     /// <summary>

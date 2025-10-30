@@ -54,3 +54,16 @@ bld/
 # AWS Lambda publish folder
 publish/
 
+# Markdown files
+*.mdc
+
+# Test results and coverage
+TestResults/
+**/TestResults/
+coverage/
+**/coverage/
+coverage-html/
+**/coverage-html/
+*.cobertura.xml
+coverage.cobertura.xml
+

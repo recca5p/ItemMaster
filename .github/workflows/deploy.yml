@@ -1,0 +1,317 @@
+name: Deploy
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+env:
+  AWS_REGION: ap-southeast-1
+  LAMBDA_FUNCTION_NAME: im-dev-lambda-item-master
+  PROJECT_PATH: ItemMaster.Lambda
+  OUTPUT_DIR: out
+
+jobs:
+  trigger-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger build-test workflow
+        id: trigger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-test.yml',
+              ref: context.ref
+            });
+            console.log('Triggered build-test workflow');
+
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            let runId = null;
+            for (let i = 0; i < 60; i++) {
+              const { data: runs } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'build-test.yml',
+                per_page: 1
+              });
+              
+              if (runs.workflow_runs.length > 0) {
+                runId = runs.workflow_runs[0].id;
+                break;
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            if (!runId) {
+              core.setFailed('Could not find triggered build-test workflow run');
+              return;
+            }
+
+            console.log(`Waiting for build-test workflow run ${runId} to complete...`);
+
+            for (let i = 0; i < 360; i++) {
+              const { data: run } = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: runId
+              });
+              
+              if (run.status === 'completed') {
+                if (run.conclusion === 'success') {
+                  console.log(`build-test workflow completed successfully`);
+                  core.setOutput('run_id', runId.toString());
+                  return;
+                } else {
+                  core.setFailed(`build-test workflow failed with conclusion: ${run.conclusion}`);
+                  return;
+                }
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+
+            core.setFailed('build-test workflow did not complete within timeout');
+    outputs:
+      run_id: ${{ steps.trigger.outputs.run_id }}
+
+  trigger-integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger integration-tests workflow
+        id: trigger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'integration-tests.yml',
+              ref: context.ref
+            });
+            console.log('Triggered integration-tests workflow');
+
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            let runId = null;
+            for (let i = 0; i < 60; i++) {
+              const { data: runs } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'integration-tests.yml',
+                per_page: 1
+              });
+              
+              if (runs.workflow_runs.length > 0) {
+                runId = runs.workflow_runs[0].id;
+                break;
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            if (!runId) {
+              core.setFailed('Could not find triggered integration-tests workflow run');
+              return;
+            }
+
+            console.log(`Waiting for integration-tests workflow run ${runId} to complete...`);
+
+            for (let i = 0; i < 720; i++) {
+              const { data: run } = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: runId
+              });
+              
+              if (run.status === 'completed') {
+                if (run.conclusion === 'success') {
+                  console.log(`integration-tests workflow completed successfully`);
+                  core.setOutput('run_id', runId.toString());
+                  return;
+                } else {
+                  core.setFailed(`integration-tests workflow failed with conclusion: ${run.conclusion}`);
+                  return;
+                }
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+
+            core.setFailed('integration-tests workflow did not complete within timeout');
+    outputs:
+      run_id: ${{ steps.trigger.outputs.run_id }}
+
+  deploy:
+    needs: [trigger-build-test, trigger-integration-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: lambda-package
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build-test.yml
+          run-id: ${{ needs.trigger-build-test.outputs.run_id }}
+          allow-failures: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get previous Lambda version
+        id: previous-version
+        run: |
+          PREVIOUS_ALIAS=$(aws lambda get-alias \
+            --function-name $LAMBDA_FUNCTION_NAME \
+            --name LIVE \
+            --region $AWS_REGION \
+            --query 'FunctionVersion' \
+            --output text 2>/dev/null || echo "")
+
+          if [ -z "$PREVIOUS_ALIAS" ]; then
+            PREVIOUS_VERSION=$(aws lambda list-versions-by-function \
+              --function-name $LAMBDA_FUNCTION_NAME \
+              --query 'Versions[-2].Version' \
+              --output text \
+              --region $AWS_REGION 2>/dev/null || echo "")
+          else
+            PREVIOUS_VERSION="$PREVIOUS_ALIAS"
+          fi
+
+          echo "previous=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          echo "Previous Lambda version: $PREVIOUS_VERSION"
+
+      - name: Deploy Lambda function
+        id: deploy
+        run: |
+          echo "Deploying Lambda function..."
+
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --zip-file fileb://function.zip \
+            --publish \
+            --region $AWS_REGION
+
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --region $AWS_REGION
+
+          FUNCTION_VERSION=$(aws lambda list-versions-by-function \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --query 'Versions[-1].Version' \
+            --output text \
+            --region $AWS_REGION)
+
+          echo "version=$FUNCTION_VERSION" >> $GITHUB_OUTPUT
+          echo "Lambda deployed successfully (Version: $FUNCTION_VERSION)"
+
+      - name: Health check
+        id: health-check
+        run: |
+          echo "Performing health check on deployed Lambda..."
+
+          echo '{}' > /tmp/health-payload.json
+
+          aws lambda invoke \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --payload fileb:///tmp/health-payload.json \
+            --cli-binary-format raw-in-base64-out \
+            /tmp/health-response.json
+
+          if [ ! -f /tmp/health-response.json ]; then
+            echo "Health check failed - no response"
+            echo "result=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          cat /tmp/health-response.json
+          STATUS_CODE=$(cat /tmp/health-response.json | jq -r '.statusCode // empty' 2>/dev/null || echo "")
+
+          if [ "$STATUS_CODE" = "200" ]; then
+            echo "Health check passed"
+            echo "result=success" >> $GITHUB_OUTPUT
+          else
+            echo "Health check failed (Status: $STATUS_CODE)"
+            echo "result=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Rollback on failure
+        if: failure() && steps.health-check.outcome == 'failure'
+        run: |
+          echo "Rolling back to previous version..."
+
+          PREVIOUS_VERSION="${{ steps.previous-version.outputs.previous }}"
+
+          if [ -z "$PREVIOUS_VERSION" ] || [ "$PREVIOUS_VERSION" = "null" ]; then
+            echo "Cannot rollback - no previous version found"
+            exit 1
+          fi
+
+          echo "Rolling back to version: $PREVIOUS_VERSION"
+
+          if aws lambda get-alias --function-name "$LAMBDA_FUNCTION_NAME" --name LIVE --region $AWS_REGION >/dev/null 2>&1; then
+            aws lambda update-alias \
+              --function-name "$LAMBDA_FUNCTION_NAME" \
+              --name LIVE \
+              --function-version "$PREVIOUS_VERSION" \
+              --region $AWS_REGION
+            echo "Updated LIVE alias to version $PREVIOUS_VERSION"
+          else
+            PREVIOUS_CODE_URL=$(aws lambda get-function \
+              --function-name "$LAMBDA_FUNCTION_NAME" \
+              --qualifier "$PREVIOUS_VERSION" \
+              --region $AWS_REGION \
+              --query 'Code.Location' \
+              --output text 2>/dev/null || echo "")
+            
+            if [ -n "$PREVIOUS_CODE_URL" ] && [ "$PREVIOUS_CODE_URL" != "None" ]; then
+              curl -o /tmp/previous-code.zip "$PREVIOUS_CODE_URL"
+              aws lambda update-function-code \
+                --function-name "$LAMBDA_FUNCTION_NAME" \
+                --zip-file fileb:///tmp/previous-code.zip \
+                --region $AWS_REGION
+              aws lambda wait function-updated \
+                --function-name "$LAMBDA_FUNCTION_NAME" \
+                --region $AWS_REGION
+              echo "Redeployed previous version code"
+            else
+              echo "WARNING: Could not retrieve previous version code for rollback"
+            fi
+          fi
+
+          echo "Rollback completed"
+          exit 1
+
+      - name: Create deployment summary
+        if: always()
+        run: |
+          HEALTH_RESULT="${{ steps.health-check.outputs.result }}"
+          DEPLOY_VERSION="${{ steps.deploy.outputs.version }}"
+
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$HEALTH_RESULT" = "success" ]; then
+            echo "**Status**: Deployment successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status**: Deployment failed - rolled back" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Function**: \`$LAMBDA_FUNCTION_NAME\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: \`$AWS_REGION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: \`$DEPLOY_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: Manual" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
